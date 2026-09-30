@@ -45,12 +45,25 @@ def validate(lock, source_only=False):
         require_sha(lock["wild"].get("revision"), "wild.revision", errors)
     if lock.get("outputTargets") != ["wasm32-wasip1"]:
         errors.append("outputTargets: only wasm32-wasip1 is supported by this recipe")
-    if source_only:
-        return errors
-    for name, item in bootstrap.get("compiler", {}).items():
+    compiler = bootstrap.get("compiler", {})
+    if not isinstance(compiler, dict) or set(compiler) != {"rustc", "rust-std", "cargo"}:
+        errors.append("bootstrap.compiler: expected rustc, rust-std and cargo")
+        compiler = {}
+    for name, item in compiler.items():
         require_digest(item.get("sha256"), f"bootstrap.compiler.{name}.sha256", errors)
         if not item.get("url", "").startswith("https://"):
             errors.append(f"bootstrap.compiler.{name}.url: expected HTTPS")
+    rustfmt = bootstrap.get("rustfmt", {})
+    if rustfmt.get("date") != bootstrap.get("compilerDate"):
+        errors.append("bootstrap.rustfmt.date: expected matching pinned stage0 date")
+    fmt_components = rustfmt.get("components", {})
+    if not isinstance(fmt_components, dict) or set(fmt_components) != {"rustfmt", "rustc"}:
+        errors.append("bootstrap.rustfmt.components: expected rustfmt and matching rustc")
+        fmt_components = {}
+    for name, item in fmt_components.items():
+        require_digest(item.get("sha256"), f"bootstrap.rustfmt.{name}.sha256", errors)
+        if not item.get("url", "").startswith("https://static.rust-lang.org/dist/"):
+            errors.append(f"bootstrap.rustfmt.{name}.url: expected HTTPS Rust dist")
     llvm = bootstrap.get("llvm", {})
     if llvm.get("mode") == "ci-prebuilt":
         require_sha(llvm.get("sourceCommit"), "bootstrap.llvm.sourceCommit", errors)
@@ -60,12 +73,23 @@ def validate(lock, source_only=False):
     elif llvm.get("mode") == "source":
         if not submodules.get("src/llvm-project"):
             errors.append("bootstrap.llvm: LLVM source submodule is missing")
+        require_sha(llvm.get("sourceCommit"), "bootstrap.llvm.sourceCommit", errors)
+        if llvm.get("sourceCommit") != submodules.get("src/llvm-project"):
+            errors.append("bootstrap.llvm.sourceCommit: must match pinned LLVM submodule")
     else:
         errors.append("bootstrap.llvm.mode: expected ci-prebuilt or source")
-    environment = lock.get("buildEnvironment", {})
-    require_digest(environment.get("imageDigest"), "buildEnvironment.imageDigest", errors)
     if lock.get("packagingFormatVersion") != 1:
         errors.append("packagingFormatVersion: expected 1")
+    if source_only:
+        return errors
+    environment = lock.get("buildEnvironment", {})
+    require_digest(environment.get("imageDigest"), "buildEnvironment.imageDigest", errors)
+    versions = environment.get("hostToolVersions")
+    if not isinstance(versions, dict) or not versions or any(
+        not isinstance(name, str) or not isinstance(version, str) or not version
+        for name, version in versions.items()
+    ):
+        errors.append("buildEnvironment.hostToolVersions: expected nonempty tool/version map")
     return errors
 
 

@@ -12,10 +12,15 @@ print(x['rust']['url'],x['rust']['revision'],s['url'],s['sha256'],s['url'].rspli
 PY
 )
 if [[ ! -d "$work/rust/.git" ]]; then
-  git clone --filter=blob:none "$source_url" "$work/rust"
+  mkdir -p "$work/rust"
+  git -C "$work/rust" init
+  git -C "$work/rust" remote add origin "$source_url"
 fi
-git -C "$work/rust" fetch origin "$source_revision"
-git -C "$work/rust" checkout --detach "$source_revision"
+git -C "$work/rust" fetch --depth 1 --filter=blob:none origin "$source_revision"
+current_revision="$(git -C "$work/rust" rev-parse HEAD 2>/dev/null || true)"
+if [[ "$current_revision" != "$source_revision" ]]; then
+  git -C "$work/rust" checkout --detach FETCH_HEAD
+fi
 [[ "$(git -C "$work/rust" rev-parse HEAD)" == "$source_revision" ]]
 python3 - "$root/toolchain.lock.json" "$work/rust" <<'PY'
 import json,subprocess,sys
@@ -26,7 +31,22 @@ for path,sha in lock['submodules'].items():
         raise SystemExit(f'submodule pin mismatch: {path}')
 print('Rust revision and all Git submodule pins match')
 PY
-git -C "$work/rust" submodule update --init --recursive
+git -C "$work/rust" submodule update --init --recursive --depth 1 --jobs 2
+python3 - "$root/toolchain.lock.json" "$work/rust/src/stage0" <<'PY'
+import json,pathlib,sys
+lock=json.load(open(sys.argv[1]))
+stage0=set(pathlib.Path(sys.argv[2]).read_text().splitlines())
+bootstrap=lock['bootstrap']
+groups=((bootstrap['compilerDate'],bootstrap['compiler']),
+        (bootstrap['rustfmt']['date'],bootstrap['rustfmt']['components']))
+for date,components in groups:
+    for name,item in components.items():
+        filename=item['url'].rsplit('/',1)[-1]
+        expected=f"dist/{date}/{filename}={item['sha256']}"
+        if expected not in stage0:
+            raise SystemExit(f'bootstrap lock differs from pinned src/stage0: {name}')
+print('Bootstrap archive digests match pinned src/stage0')
+PY
 archive="$work/downloads/$sdk_name"
 if [[ ! -f "$archive" ]]; then curl -fL --retry 3 -o "$archive.part" "$sdk_url" && mv "$archive.part" "$archive"; fi
 echo "$sdk_digest  $archive" | sha256sum -c -

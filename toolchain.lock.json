@@ -25,6 +25,19 @@
       "mode": "source",
       "reason": "The matching upstream CI LLVM archive returned 404 on 2026-09-30; build the pinned src/llvm-project submodule instead.",
       "sourceCommit": "1cb4e3833c1919c2e6fb579a23ac0e2b22587b7e"
+    },
+    "rustfmt": {
+      "date": "2026-03-05",
+      "components": {
+        "rustfmt": {
+          "sha256": "bde94b7cf7038ce8e8cf9f0215abe66624a22aa64437c02c72331ea86951c685",
+          "url": "https://static.rust-lang.org/dist/2026-03-05/rustfmt-nightly-x86_64-unknown-linux-gnu.tar.xz"
+        },
+        "rustc": {
+          "sha256": "cda6cb941296a57229610ad32fa48c3df8408e8dddafad621f9f3e663e3b9868",
+          "url": "https://static.rust-lang.org/dist/2026-03-05/rustc-nightly-x86_64-unknown-linux-gnu.tar.xz"
+        }
+      }
     }
   },
   "buildEnvironment": {

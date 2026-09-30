@@ -6,7 +6,7 @@ The compiler is a Rust fork with Cranelift and in-process `riwl` linking. It run
 
 ## Build inputs
 
-[`toolchain.lock.json`](toolchain.lock.json) pins the builder and Rust source commits, 12 Git submodules, WASI SDK 32 digest, bootstrap Rust archives, target, and packaging version. The selected Rust revision is `abc48c0b8aba37d3f3862a9d5c76eb4e78f90e88`, which declares version `1.96.0-dev`. Its association with the old `artifacts-test-7` binary is an inference from the July 2026 workflow chronology, not proven binary provenance.
+[`toolchain.lock.json`](toolchain.lock.json) pins the builder and Rust source commits, 12 Git submodules, WASI SDK 32 digest, bootstrap Rust and rustfmt archives, target, and packaging version. Archive digests are also checked against the selected Rust source's `src/stage0`. The selected Rust revision is `abc48c0b8aba37d3f3862a9d5c76eb4e78f90e88`, which declares version `1.96.0-dev`. Its association with the old `artifacts-test-7` binary is an inference from the July 2026 workflow chronology, not proven binary provenance.
 
 The recipe's CI LLVM archive for that source revision is no longer available. This fork selects the pinned LLVM source submodule instead. A controlled Linux x86_64 build environment must be pinned and the resulting compiler must pass the app's Check/Run/Cargo gates before a release can be made. There is currently **no Crabrix-produced release artifact**.
 
@@ -23,13 +23,29 @@ Production build sequence on a controlled Linux x86_64 host with enough RAM and 
 ```sh
 ./scripts/doctor.sh
 ./scripts/fetch-sources.sh --locked
+./scripts/vendor-deps.sh --locked
 ./scripts/build-toolchain.sh --locked
 ./scripts/package-toolchain.sh --deterministic
 ./scripts/verify-artifacts.sh
 ./scripts/smoke-toolchain.sh
 ```
 
-The full sequence is intentionally fail-closed while `buildEnvironment.imageDigest` is unresolved; `doctor.sh` reports the missing lock field. `fetch-sources.sh --locked` can already materialize pinned Rust source, submodules, SDK and bootstrap compiler inputs for investigation. These commands are not presented as a completed smoke result.
+The full sequence is intentionally fail-closed while `buildEnvironment.imageDigest` is unresolved; `doctor.sh` reports the missing lock field. `fetch-sources.sh --locked` can materialize pinned Rust source, submodules, SDK and bootstrap compiler inputs for investigation. `vendor-deps.sh --locked` is the explicit network phase for Rust workspace crates; the later build requires its vendor tree and runs Cargo offline. These commands are not presented as a completed smoke result.
+
+### Docker build host
+
+The repository includes a candidate Linux x86_64 build environment in [`docker/Dockerfile`](docker/Dockerfile). Its Ubuntu base is pinned by an amd64 manifest digest. Build the image and verify the source lock on a Docker host:
+
+```sh
+docker buildx build --platform linux/amd64 --load \
+  -t crabrix-toolchain-builder:local -f docker/Dockerfile .
+docker run --rm --platform linux/amd64 \
+  --mount "type=bind,src=$PWD,dst=/workspace,readonly" \
+  crabrix-toolchain-builder:local \
+  python3 scripts/validate-lock.py --source-only
+```
+
+The local image is a candidate, not the release build environment. Record and distribute its completed image digest before filling `buildEnvironment.imageDigest`; the lock must identify the exact image used for a source build. On Apple Silicon, Docker can run this x86_64 image through emulation, but the Docker VM still needs enough RAM and disk for Rust and LLVM. The [Rust compiler development guide](https://rustc-dev-guide.rust-lang.org/building/prerequisites.html) recommends at least 8 GB RAM and 30 GB free disk for a compiler build; the LLVM source build may need more. Do not infer a successful compiler build from a passing image or source-lock check.
 
 `package-toolchain.sh` emits unstripped `rustc.wasm`, deterministic `sysroot-wasip1.zip`, per-file SHA-256 inventory, source provenance and checksums after a successful own build. Signing is a separate protected release step. No source-built output is copied from the previous `artifacts-test-7` release.
 
