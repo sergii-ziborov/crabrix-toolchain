@@ -21,13 +21,13 @@ This record covers input preparation on an Apple Silicon Mac using Docker Deskto
 | `./scripts/vendor-deps.sh --locked` in the candidate image | Passed; Rust `x.py vendor` completed and pinned rustfmt archives verified |
 | Cargo `metadata --locked --offline` using the vendored tree | Passed for Rust root (673 packages), library (53), Cranelift (673), and Cargo (506) |
 | `bash -n` for changed shell scripts; `git diff --check` | Passed |
-| `./scripts/doctor.sh` in the candidate image | Expected refusal: Docker VM exposed 1,974 MiB, below the recipe's 8 GiB preflight |
+| `./scripts/doctor.sh` in the candidate image | Expected refusal: Docker VM exposed 1,974 MiB RAM and the mounted work disk exposed 13,913 MiB free, below the 8 GiB RAM and 30 GiB free-disk preflight |
 
 The first vendoring attempts exposed missing rustfmt bootstrap inputs, an unsupported `file://` URL in the Rust bootstrap downloader, the need for WASI SDK `clang++` during sanity checks, and the fact that `x.py vendor` does not write `.cargo/config.toml`. The recipe now pins those extra archives, separates explicit fetch and vendoring phases, provides the SDK and writes the vendor config. Cargo resolves the tested workspaces offline; full build network isolation remains unverified. The final full vendoring command passed after those fixes.
 
 ## Still required
 
-- Increase memory available to the Linux builder and reserve enough disk for source LLVM plus Rust. The current Docker Desktop VM had about 2 GiB RAM and disk free space fell below 20 GiB during input preparation. The [Rust compiler guide](https://rustc-dev-guide.rust-lang.org/building/prerequisites.html) recommends at least 8 GiB RAM and 30 GiB free disk for a compiler build; this recipe builds LLVM from source as well.
+- Increase memory available to the Linux builder and reserve enough disk for source LLVM plus Rust. The current Docker Desktop VM had about 2 GiB RAM and 13.6 GiB free on the mounted work disk at the last preflight. The [Rust compiler guide](https://rustc-dev-guide.rust-lang.org/building/prerequisites.html) recommends at least 8 GiB RAM and 30 GiB free disk for a compiler build; this recipe builds LLVM from source as well. `doctor.sh` now reports both shortages before any build starts.
 - Produce and distribute a fixed builder image, then record its pullable image digest and tool versions in `toolchain.lock.json`. The local candidate image ID alone does not close the release environment lock.
 - Run `build-toolchain.sh`, packaging, artifact verification, two clean build comparison, and Crabrix Check/Run/Cargo integration gates. None of these has passed yet; no `rustc.wasm` or sysroot release was produced.
 

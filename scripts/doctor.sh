@@ -17,8 +17,21 @@ if [[ -r /sys/fs/cgroup/memory.max ]]; then
     if (( cgroup_kib < memory_kib )); then memory_kib="$cgroup_kib"; fi
   fi
 fi
+resource_error=0
 if (( memory_kib < 8 * 1024 * 1024 )); then
   echo "Production Rust/LLVM build requires at least 8 GiB available to this Linux environment; detected $((memory_kib / 1024)) MiB." >&2
-  exit 1
+  resource_error=1
 fi
+work="${CRABRIX_TOOLCHAIN_WORK:-$root/work}"
+disk_path="$work"
+[[ -e "$disk_path" ]] || disk_path="$root"
+free_disk_kib="$(df -Pk "$disk_path" | awk 'NR == 2 { print $4 }')"
+if [[ ! "$free_disk_kib" =~ ^[0-9]+$ ]]; then
+  echo "Could not determine free build disk space at $disk_path." >&2
+  resource_error=1
+elif (( free_disk_kib < 30 * 1024 * 1024 )); then
+  echo "Production Rust/LLVM build requires at least 30 GiB free at $disk_path; detected $((free_disk_kib / 1024)) MiB." >&2
+  resource_error=1
+fi
+(( resource_error == 0 )) || exit 1
 python3 "$root/scripts/validate-lock.py"
