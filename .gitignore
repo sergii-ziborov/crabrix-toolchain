@@ -1,5 +1,4 @@
-/out/
-/rust/
-node_modules/
-.DS_Store
-*.swp
+work/
+dist/
+*.part
+__pycache__/

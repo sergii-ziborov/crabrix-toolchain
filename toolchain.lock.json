@@ -1,0 +1,76 @@
+{
+  "backend": {
+    "name": "rustc_codegen_cranelift + in-tree Phase-B riwl",
+    "patches": [],
+    "revision": "abc48c0b8aba37d3f3862a9d5c76eb4e78f90e88"
+  },
+  "bootstrap": {
+    "compilerDate": "2026-03-05",
+    "compiler": {
+      "cargo": {
+        "sha256": "3330ec521c6d283934f756775be28b827ed0e04ad9f584245d14641ccde72dfc",
+        "url": "https://static.rust-lang.org/dist/2026-03-05/cargo-beta-x86_64-unknown-linux-gnu.tar.xz"
+      },
+      "rust-std": {
+        "sha256": "bc2ffcdf3a4eae93774ac99397bde4d31a1aa0379b86836d01967e300aad58a7",
+        "url": "https://static.rust-lang.org/dist/2026-03-05/rust-std-beta-x86_64-unknown-linux-gnu.tar.xz"
+      },
+      "rustc": {
+        "sha256": "09f6ad1eac75fdd1fb9fec65896a89230af299764be7035610dbb257ff7db092",
+        "url": "https://static.rust-lang.org/dist/2026-03-05/rustc-beta-x86_64-unknown-linux-gnu.tar.xz"
+      }
+    },
+    "configSourceSHA256": "0c5a1993f61a29efbca1aa3241c7e51f0108fe63333629d1716c48dc98566454",
+    "llvm": {
+      "mode": "source",
+      "reason": "The matching upstream CI LLVM archive returned 404 on 2026-09-30; build the pinned src/llvm-project submodule instead.",
+      "sourceCommit": "1cb4e3833c1919c2e6fb579a23ac0e2b22587b7e"
+    }
+  },
+  "buildEnvironment": {
+    "hostToolVersions": null,
+    "imageDigest": null
+  },
+  "builder": {
+    "revision": "d7c1a08a60816ed824bb04f75fe79fa797996deb",
+    "url": "https://github.com/AngelOnFira/wasm-rustc.git"
+  },
+  "outputTargets": [
+    "wasm32-wasip1"
+  ],
+  "packagingFormatVersion": 1,
+  "patchDigests": [],
+  "rust": {
+    "actualVersion": "1.96.0-dev",
+    "commitDate": "2026-07-22T01:34:27Z",
+    "releaseArtifactMapping": "inferred, not proven",
+    "revision": "abc48c0b8aba37d3f3862a9d5c76eb4e78f90e88",
+    "url": "https://github.com/AngelOnFira/rust.git"
+  },
+  "schemaVersion": 1,
+  "submodules": {
+    "library/backtrace": "28ec93b503bf0410745bc3d571bf3dc1caac3019",
+    "src/doc/book": "05d114287b7d6f6c9253d5242540f00fbd6172ab",
+    "src/doc/edition-guide": "c3c0f0b3da26610138b7ba7663f60cd2c68cf184",
+    "src/doc/embedded-book": "2463edeb8003c5743918b3739a9f6870b86396f5",
+    "src/doc/nomicon": "cc6a6bae8c3bfa389974e533c54694662c1a9de6",
+    "src/doc/reference": "7446bf9697c95d155eef33c6a9d91fbd29a5e359",
+    "src/doc/rust-by-example": "5383db524711c0c9c43c3ca9e5e706089672ed6a",
+    "src/gcc": "efdd0a7290c22f5438d7c5380105d353ee3e8518",
+    "src/llvm-project": "1cb4e3833c1919c2e6fb579a23ac0e2b22587b7e",
+    "src/tools/cargo": "888f675344eb1cf2308fd53183e667bdd2c58e51",
+    "src/tools/enzyme": "324402444ac48874d8ebd3ac767330bdc7cb1c06",
+    "src/tools/rustc-perf": "c0301bc44d175b9b2c5442b25049475c39d7700c"
+  },
+  "wasiSDK": {
+    "hostTriple": "x86_64-linux",
+    "sha256": "55fc523ebfbc98f69d1034fcfcb83d1ff5610cd9ab7eceef6cd097a30ba4ef93",
+    "url": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-32/wasi-sdk-32.0-x86_64-linux.tar.gz",
+    "version": "32.0"
+  },
+  "wild": {
+    "reason": "Phase-B source at selected Rust commit has in-tree riwl; legacy build-local fallback removed",
+    "revision": null,
+    "used": false
+  }
+}

@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Fail closed on unresolved or floating build inputs."""
+import argparse
+import json
+from pathlib import Path
+import re
+import sys
+
+SHA = re.compile(r"[0-9a-f]{40}\Z")
+DIGEST = re.compile(r"[0-9a-f]{64}\Z")
+
+
+def require_sha(value, name, errors):
+    if not isinstance(value, str) or not SHA.fullmatch(value):
+        errors.append(f"{name}: expected exact 40-character Git commit")
+
+
+def require_digest(value, name, errors):
+    if not isinstance(value, str) or not DIGEST.fullmatch(value):
+        errors.append(f"{name}: expected verified SHA-256 digest")
+
+
+def validate(lock, source_only=False):
+    errors = []
+    if lock.get("schemaVersion") != 1:
+        errors.append("schemaVersion: expected 1")
+    for name in ("builder", "rust"):
+        item = lock.get(name, {})
+        if not item.get("url", "").startswith("https://github.com/"):
+            errors.append(f"{name}.url: expected HTTPS Git source")
+        require_sha(item.get("revision"), f"{name}.revision", errors)
+    require_sha(lock.get("backend", {}).get("revision"), "backend.revision", errors)
+    submodules = lock.get("submodules", {})
+    if not submodules:
+        errors.append("submodules: empty")
+    for path, sha in submodules.items():
+        require_sha(sha, f"submodules[{path}]", errors)
+    sdk = lock.get("wasiSDK", {})
+    if not sdk.get("url", "").startswith("https://"):
+        errors.append("wasiSDK.url: expected HTTPS")
+    require_digest(sdk.get("sha256"), "wasiSDK.sha256", errors)
+    bootstrap = lock.get("bootstrap", {})
+    require_digest(bootstrap.get("configSourceSHA256"), "bootstrap.configSourceSHA256", errors)
+    if lock.get("wild", {}).get("used"):
+        require_sha(lock["wild"].get("revision"), "wild.revision", errors)
+    if lock.get("outputTargets") != ["wasm32-wasip1"]:
+        errors.append("outputTargets: only wasm32-wasip1 is supported by this recipe")
+    if source_only:
+        return errors
+    for name, item in bootstrap.get("compiler", {}).items():
+        require_digest(item.get("sha256"), f"bootstrap.compiler.{name}.sha256", errors)
+        if not item.get("url", "").startswith("https://"):
+            errors.append(f"bootstrap.compiler.{name}.url: expected HTTPS")
+    llvm = bootstrap.get("llvm", {})
+    if llvm.get("mode") == "ci-prebuilt":
+        require_sha(llvm.get("sourceCommit"), "bootstrap.llvm.sourceCommit", errors)
+        require_digest(llvm.get("sha256"), "bootstrap.llvm.sha256", errors)
+        if llvm.get("availability") != "verified":
+            errors.append("bootstrap.llvm: archive availability is not verified")
+    elif llvm.get("mode") == "source":
+        if not submodules.get("src/llvm-project"):
+            errors.append("bootstrap.llvm: LLVM source submodule is missing")
+    else:
+        errors.append("bootstrap.llvm.mode: expected ci-prebuilt or source")
+    environment = lock.get("buildEnvironment", {})
+    require_digest(environment.get("imageDigest"), "buildEnvironment.imageDigest", errors)
+    if lock.get("packagingFormatVersion") != 1:
+        errors.append("packagingFormatVersion: expected 1")
+    return errors
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--lock", type=Path, default=Path(__file__).resolve().parents[1] / "toolchain.lock.json")
+    parser.add_argument("--source-only", action="store_true")
+    args = parser.parse_args()
+    errors = validate(json.loads(args.lock.read_text()), source_only=args.source_only)
+    if errors:
+        for error in errors:
+            print(f"lock error: {error}", file=sys.stderr)
+        return 1
+    print("Source inputs pinned" if args.source_only else "Release build inputs locked")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
