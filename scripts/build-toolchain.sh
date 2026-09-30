@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
-[[ "${1:-}" == --locked ]] || { echo "usage: $0 --locked" >&2; exit 2; }
+mode="${1:-}"
+if (( $# != 1 )) || [[ "$mode" != --locked && "$mode" != --candidate ]]; then
+  echo "usage: $0 --locked|--candidate" >&2
+  exit 2
+fi
 root="$(cd "$(dirname "$0")/.." && pwd)"
-"$root/scripts/doctor.sh"
+"$root/scripts/doctor.sh" "$mode"
 work="${CRABRIX_TOOLCHAIN_WORK:-$root/work}"
 [[ -d "$work/rust/.git" ]] || { echo "run fetch-sources.sh --locked first" >&2; exit 1; }
 read -r expected_sha sdk_name < <(python3 - "$root/toolchain.lock.json" <<'PY'
@@ -16,6 +20,15 @@ PY
 [[ -d "$work/rust/vendor" && -f "$work/rust/.cargo/config.toml" ]] || {
   echo "run vendor-deps.sh --locked before the offline build" >&2; exit 1;
 }
+candidate_marker="$work/.candidate-build"
+if [[ "$mode" == --candidate ]]; then
+  # Mark the work tree before x.py writes any output. A failed trial must not
+  # later be packaged merely because its release environment lock was filled.
+  printf 'Candidate build outputs; use a fresh work directory for --locked.\n' > "$candidate_marker"
+elif [[ -e "$candidate_marker" ]]; then
+  echo "This work directory contains candidate build outputs; use a fresh work directory for --locked." >&2
+  exit 1
+fi
 sdk_dir="$work/rust/wasi-sdk-32.0-x86_64-linux"
 if [[ ! -x "$sdk_dir/bin/clang" ]]; then
   tar -xzf "$work/downloads/$sdk_name" -C "$work/rust"
@@ -39,4 +52,8 @@ mkdir -p "$work/logs"
     --set build.vendor=true --set llvm.download-ci-llvm=false \
     2>&1 | tee "$work/logs/wasip1-sysroot-build.log"
 )
-echo "Build finished; package-toolchain.sh validates the produced files before publication."
+if [[ "$mode" == --candidate ]]; then
+  echo "Candidate build finished. Packaging and publication still require the complete release environment lock."
+else
+  echo "Build finished; package-toolchain.sh validates the produced files before publication."
+fi

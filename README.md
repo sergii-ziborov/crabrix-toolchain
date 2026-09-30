@@ -30,7 +30,7 @@ Production build sequence on a controlled Linux x86_64 host with enough RAM and 
 ./scripts/smoke-toolchain.sh
 ```
 
-The full sequence is intentionally fail-closed while `buildEnvironment.imageDigest` is unresolved; `doctor.sh` reports the missing lock field. `fetch-sources.sh --locked` can materialize pinned Rust source, submodules, SDK and bootstrap compiler inputs for investigation. `vendor-deps.sh --locked` is the explicit network phase for Rust workspace crates; the later build requires its vendor tree and runs Cargo offline. These commands are not presented as a completed smoke result.
+The release sequence is intentionally fail-closed while `buildEnvironment.imageDigest` is unresolved. `fetch-sources.sh --locked` can materialize pinned Rust source, submodules, SDK and bootstrap compiler inputs for investigation. `vendor-deps.sh --locked` is the explicit network phase for Rust workspace crates; the later build requires its vendor tree and runs Cargo offline. Once the resource preflight passes, `./scripts/build-toolchain.sh --candidate` permits a trial source build with the pinned source inputs while the release environment lock is being finalized. It marks that work directory as a candidate before compilation. Release packaging refuses candidate outputs even if the lock is filled later; run `--locked` in a fresh work directory for a publishable build. These commands are not presented as a completed smoke result.
 
 ### Docker build host
 

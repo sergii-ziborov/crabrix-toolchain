@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
+mode="${1:---locked}"
+if (( $# > 1 )) || [[ "$mode" != --locked && "$mode" != --candidate ]]; then
+  echo "usage: $0 [--locked|--candidate]" >&2
+  exit 2
+fi
 root="$(cd "$(dirname "$0")/.." && pwd)"
 python3 "$root/scripts/validate-lock.py" --source-only
 for command in git python3 curl tar sha256sum cmake ninja gcc; do
@@ -34,4 +39,8 @@ elif (( free_disk_kib < 30 * 1024 * 1024 )); then
   resource_error=1
 fi
 (( resource_error == 0 )) || exit 1
-python3 "$root/scripts/validate-lock.py"
+if [[ "$mode" == --locked ]]; then
+  python3 "$root/scripts/validate-lock.py"
+else
+  echo "Candidate build inputs are source-pinned; release environment lock is incomplete." >&2
+fi
