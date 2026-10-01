@@ -1,53 +1,99 @@
 #!/usr/bin/env python3
-"""Strip non-essential custom sections from a wasm module (name, producers, .debug_*).
+"""Make a test-only size candidate by removing Wasm name and debug sections.
 
-These sections are debug/metadata only — they carry no semantics, so removing them cannot change
-execution. For our committed rustc.wasm the `name` section alone is ~30 MB (function names for
-stack traces the browser never needs). Everything else is copied byte-for-byte, so this is far
-safer than a full wasm-opt round-trip (no re-encoding of the code section).
-
-Usage: strip-wasm-custom.py <in.wasm> <out.wasm>
+Every retained section is copied byte for byte. In particular, producers,
+target_features, and executable sections stay intact. Compatibility and trap
+diagnostics must be checked before this output is used by a release packager.
 """
-import sys
 
-STRIP_EXACT = {"name", "producers"}
+import argparse
+from pathlib import Path
 
 
-def uleb(b, i):
-    r = s = 0
-    while True:
-        x = b[i]; i += 1
-        r |= (x & 0x7F) << s
-        if not (x & 0x80):
-            break
-        s += 7
-    return r, i
+MAGIC = b"\0asm\1\0\0\0"
+CHUNK = 1024 * 1024
+
+
+def read_uleb32(stream):
+    raw = bytearray()
+    value = 0
+    for shift in range(0, 35, 7):
+        byte = stream.read(1)
+        if not byte:
+            raise ValueError("truncated Wasm section length")
+        part = byte[0]
+        raw.extend(byte)
+        if shift == 28 and part > 15:
+            raise ValueError("Wasm section length exceeds u32")
+        value |= (part & 127) << shift
+        if not part & 128:
+            return value, bytes(raw)
+    raise ValueError("Wasm section length is overlong")
+
+
+def strip(source: Path, destination: Path):
+    source = Path(source)
+    destination = Path(destination)
+    if source.resolve() == destination.resolve():
+        raise ValueError("input and output must be different files")
+    if not source.is_file() or source.is_symlink():
+        raise ValueError("input must be a regular Wasm file")
+    if destination.exists():
+        raise ValueError("output already exists")
+
+    source_size = source.stat().st_size
+    dropped = []
+    created = False
+    try:
+        with source.open("rb") as incoming, destination.open("xb") as outgoing:
+            created = True
+            if incoming.read(8) != MAGIC:
+                raise ValueError("invalid Wasm header")
+            outgoing.write(MAGIC)
+            while incoming.tell() < source_size:
+                section_id = incoming.read(1)
+                if not section_id:
+                    raise ValueError("truncated Wasm section identifier")
+                size, size_bytes = read_uleb32(incoming)
+                payload_start = incoming.tell()
+                payload_end = payload_start + size
+                if payload_end > source_size:
+                    raise ValueError("Wasm section exceeds input size")
+                name = None
+                if section_id == b"\0":
+                    name_size, _ = read_uleb32(incoming)
+                    if incoming.tell() + name_size > payload_end:
+                        raise ValueError("Wasm custom section name exceeds payload")
+                    name = incoming.read(name_size).decode("utf-8")
+                if name == "name" or (name is not None and name.startswith(".debug_")):
+                    dropped.append((name, 1 + len(size_bytes) + size))
+                    incoming.seek(payload_end)
+                    continue
+                outgoing.write(section_id + size_bytes)
+                incoming.seek(payload_start)
+                remaining = size
+                while remaining:
+                    block = incoming.read(min(CHUNK, remaining))
+                    if not block:
+                        raise ValueError("truncated Wasm section payload")
+                    outgoing.write(block)
+                    remaining -= len(block)
+        return dropped
+    except Exception:
+        if created:
+            destination.unlink(missing_ok=True)
+        raise
 
 
 def main():
-    inp, out = sys.argv[1], sys.argv[2]
-    d = open(inp, "rb").read()
-    assert d[:4] == b"\x00asm", "not a wasm module"
-    o = bytearray(d[:8])  # magic + version
-    i = 8
-    dropped = 0
-    while i < len(d):
-        sid = d[i]
-        size, k = uleb(d, i + 1)
-        seg_start, seg_end = i, k + size
-        drop = False
-        if sid == 0:  # custom section
-            nl, m = uleb(d, k)
-            nm = d[m:m + nl].decode("utf8", "replace")
-            if nm in STRIP_EXACT or nm.startswith(".debug_"):
-                drop = True
-        if drop:
-            dropped += seg_end - seg_start
-        else:
-            o += d[seg_start:seg_end]
-        i = seg_end
-    open(out, "wb").write(o)
-    print(f"in {len(d)/1048576:.2f} MB  out {len(o)/1048576:.2f} MB  dropped {dropped/1048576:.2f} MB")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("source", type=Path)
+    parser.add_argument("destination", type=Path)
+    args = parser.parse_args()
+    dropped = strip(args.source, args.destination)
+    removed = sum(size for _, size in dropped)
+    print(f"removed {removed} bytes in {len(dropped)} name/debug sections; "
+          f"output {args.destination.stat().st_size} bytes")
 
 
 if __name__ == "__main__":

@@ -54,6 +54,8 @@ The local image is a candidate, not the release build environment. Record and di
 
 `package-toolchain.sh` emits unstripped `rustc.wasm`, deterministic `sysroot-wasip1.zip` with an app-readable manifest, per-file SHA-256 inventory, ZIP checksum, source provenance and checksums after a successful own build. `verify-artifacts.sh` checks the ZIP contents against both inventories. Signing is a separate protected release step. No source-built output is copied from the previous `artifacts-test-7` release.
 
+The separate `scripts/strip-wasm-custom.py` is a test-only size experiment. On the second candidate it removed 41,503,919 bytes of function-name and debug sections (129,337,555 → 87,833,636 bytes), while retaining `producers`, `target_features` and every executable section byte for byte. The release packager still keeps the original module until the smaller candidate passes the same compiler, diagnostics and performance gates.
+
 ## Compatibility and verification
 
 The intended output target is `wasm32-wasip1`. Functional release gates cover Crabrix Check and Run, E0502 diagnostics, root features, a real crate, offline compilation, and Vendor. Two independent clean builds must be compared; identical raw digests are not claimed in advance. See [REPRODUCIBILITY.md](REPRODUCIBILITY.md) and [SECURITY.md](SECURITY.md).
