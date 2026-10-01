@@ -62,6 +62,8 @@ def validate(lock, source_only=False):
     require_digest(sdk.get("sha256"), "wasiSDK.sha256", errors)
     bootstrap = lock.get("bootstrap", {})
     require_digest(bootstrap.get("configSourceSHA256"), "bootstrap.configSourceSHA256", errors)
+    if bootstrap.get("codegenBackends") != ["cranelift"]:
+        errors.append("bootstrap.codegenBackends: expected Cranelift-only compiler")
     if lock.get("wild", {}).get("used"):
         require_sha(lock["wild"].get("revision"), "wild.revision", errors)
     if lock.get("outputTargets") != ["wasm32-wasip1"]:
@@ -91,18 +93,16 @@ def validate(lock, source_only=False):
         require_digest(llvm.get("sha256"), "bootstrap.llvm.sha256", errors)
         if llvm.get("availability") != "verified":
             errors.append("bootstrap.llvm: archive availability is not verified")
-    elif llvm.get("mode") == "source":
+    elif llvm.get("mode") in ("source", "disabled"):
         if not submodules.get("src/llvm-project"):
             errors.append("bootstrap.llvm: LLVM source submodule is missing")
         require_sha(llvm.get("sourceCommit"), "bootstrap.llvm.sourceCommit", errors)
         if llvm.get("sourceCommit") != submodules.get("src/llvm-project"):
             errors.append("bootstrap.llvm.sourceCommit: must match pinned LLVM submodule")
-        if llvm.get("targets") != ["X86", "WebAssembly"]:
+        if llvm.get("mode") == "source" and llvm.get("targets") != ["X86", "WebAssembly"]:
             errors.append("bootstrap.llvm.targets: expected X86 and WebAssembly")
-        if llvm.get("experimentalTargets") != []:
-            errors.append("bootstrap.llvm.experimentalTargets: expected an empty list")
     else:
-        errors.append("bootstrap.llvm.mode: expected ci-prebuilt or source")
+        errors.append("bootstrap.llvm.mode: expected ci-prebuilt, source, or disabled")
     if lock.get("packagingFormatVersion") != 1:
         errors.append("packagingFormatVersion: expected 1")
     if source_only:

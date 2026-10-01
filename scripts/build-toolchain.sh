@@ -20,7 +20,7 @@ PY
 [[ -d "$work/rust/vendor" && -f "$work/rust/.cargo/config.toml" ]] || {
   echo "run vendor-deps.sh --locked before the offline build" >&2; exit 1;
 }
-"$root/scripts/apply-patches.sh" --locked
+"$root/scripts/apply-patches.sh" "$mode"
 candidate_marker="$work/.candidate-build"
 if [[ "$mode" == --candidate ]]; then
   # Mark the work tree before x.py writes any output. A failed trial must not
@@ -42,23 +42,21 @@ export CARGO_NET_OFFLINE=true
 export SOURCE_DATE_EPOCH="$(git -C "$work/rust" show -s --format=%ct HEAD)"
 export TZ=UTC
 export LC_ALL=C
-mapfile -t llvm_backends < <(python3 - "$root/toolchain.lock.json" <<'PY'
+codegen_backends="$(python3 - "$root/toolchain.lock.json" <<'PY'
 import json,sys
-llvm=json.load(open(sys.argv[1]))['bootstrap']['llvm']
-print(';'.join(llvm['targets']))
-print(';'.join(llvm['experimentalTargets']))
+print(json.dumps(json.load(open(sys.argv[1]))['bootstrap']['codegenBackends'],separators=(',',':')))
 PY
-)
-llvm_args=(--set "llvm.targets=${llvm_backends[0]}" --set "llvm.experimental-targets=${llvm_backends[1]}")
+)"
+codegen_args=(--set "rust.codegen-backends=$codegen_backends")
 mkdir -p "$work/logs"
 (
   cd "$work/rust"
   env -u GITHUB_ACTIONS -u CI python3 x.py install \
-    --set build.vendor=true --set llvm.download-ci-llvm=false "${llvm_args[@]}" \
+    --set build.vendor=true --set llvm.download-ci-llvm=false "${codegen_args[@]}" \
     2>&1 | tee "$work/logs/rustc-build.log"
   env -u GITHUB_ACTIONS -u CI python3 x.py build library \
     --target wasm32-wasip1 --stage 1 \
-    --set build.vendor=true --set llvm.download-ci-llvm=false "${llvm_args[@]}" \
+    --set build.vendor=true --set llvm.download-ci-llvm=false "${codegen_args[@]}" \
     2>&1 | tee "$work/logs/wasip1-sysroot-build.log"
 )
 if [[ "$mode" == --candidate ]]; then

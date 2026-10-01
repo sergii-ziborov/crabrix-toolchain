@@ -7,6 +7,9 @@
     "revision": "abc48c0b8aba37d3f3862a9d5c76eb4e78f90e88"
   },
   "bootstrap": {
+    "codegenBackends": [
+      "cranelift"
+    ],
     "compilerDate": "2026-03-05",
     "compiler": {
       "cargo": {
@@ -24,14 +27,9 @@
     },
     "configSourceSHA256": "0c5a1993f61a29efbca1aa3241c7e51f0108fe63333629d1716c48dc98566454",
     "llvm": {
-      "experimentalTargets": [],
-      "mode": "source",
-      "reason": "The matching upstream CI LLVM archive returned 404 on 2026-09-30; build the pinned src/llvm-project submodule instead.",
-      "sourceCommit": "1cb4e3833c1919c2e6fb579a23ac0e2b22587b7e",
-      "targets": [
-        "X86",
-        "WebAssembly"
-      ]
+      "mode": "disabled",
+      "reason": "The pinned Cranelift-only bootstrap does not build rustc_codegen_llvm; the unavailable CI LLVM archive is not used.",
+      "sourceCommit": "1cb4e3833c1919c2e6fb579a23ac0e2b22587b7e"
     },
     "rustfmt": {
       "date": "2026-03-05",
