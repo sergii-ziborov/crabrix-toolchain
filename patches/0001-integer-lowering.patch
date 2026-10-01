@@ -1,8 +1,29 @@
 diff --git a/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs b/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs
-index f0cb3c9a..5d4a0936 100644
+index f0cb3c9a..258e842d 100644
 --- a/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs
 +++ b/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs
-@@ -886,6 +886,19 @@ fn lower_unary(
+@@ -198,6 +198,20 @@ pub fn lower_inst(
+             let a = cx.one(args[0])?;
+             let b = cx.one(args[1])?;
+ 
++            // CLIF checked i64 multiplication uses the upper product half to
++            // detect overflow. Core Wasm only exposes the lower i64 multiply.
++            if rty == types::I64 {
++                let upper = match opcode {
++                    Opcode::Umulhi => Some(i128_lower::umulhi64(body, wb, a, b)),
++                    Opcode::Smulhi => Some(i128_lower::smulhi64(body, wb, a, b)),
++                    _ => None,
++                };
++                if let Some(value) = upper {
++                    cx.bind1(result, value);
++                    return Ok(());
++                }
++            }
++
+             // Shifts: wasm requires amount type == operand type; CLIF allows a
+             // mismatch. Both agree the amount is taken mod bit-width, so a plain
+             // wrap/extend preserves semantics. (Rotates share the fixup.)
+@@ -886,6 +900,19 @@ fn lower_unary(
              let dst_ty = dfg.value_type(result);
              let signed = opcode == Opcode::Sextend;
              let v = cx.one(arg)?;
@@ -22,7 +43,7 @@ index f0cb3c9a..5d4a0936 100644
              // Normalize narrow sources within I32 first: canonical form is already
              // zero-extended, so uextend is a no-op; sextend re-signs in place.
              let (v, src_ty) = match src_ty {
-@@ -983,11 +996,12 @@ fn lower_unary(
+@@ -983,11 +1010,12 @@ fn lower_unary(
                  // Narrow destinations MUST re-canonicalize (mask): the source's high
                  // bits are live data, not representation slack. (The battery's
                  // cast_chain miscompile is what happens otherwise.)

@@ -7,7 +7,7 @@
 - Removed floating-branch and wild default-branch build paths.
 - Added source lock validation and deterministic artifact packaging tools.
 - Selected a Cranelift-only candidate bootstrap after the matching CI LLVM archive became unavailable; an initial source LLVM attempt produced no toolchain artifact.
-- Added a digest-pinned backend patch for observed narrow integer conversion gaps; heavy-crate compatibility is pending a new compiler build and Check/Run results.
+- Added digest-pinned backend patches for observed narrow integer conversions and missing high-half i64 multiplication. The first candidate passed E0502 and all 46 Academy Examples; dependency-rich compilation needs a revised candidate and build-script support for affected crates.
 - Selected GNU `as` for Cranelift inline assembly. Removed a trial bootstrap sysroot patch after it attempted to install a WASI `.so` for a statically linked backend.
 - Made the deterministic sysroot ZIP compatible with the app's manifest reader and added a package-level ZIP/inventory verifier.
 - Added an isolated, explicitly marked candidate artifact staging path for compatibility tests; release builds require a clean committed builder checkout.
