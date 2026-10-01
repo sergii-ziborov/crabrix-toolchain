@@ -24,7 +24,7 @@ if [[ -r /sys/fs/cgroup/memory.max ]]; then
 fi
 resource_error=0
 if (( memory_kib < 8 * 1024 * 1024 )); then
-  echo "Production Rust/LLVM build requires at least 8 GiB available to this Linux environment; detected $((memory_kib / 1024)) MiB." >&2
+  echo "Production Rust compiler build requires at least 8 GiB available to this Linux environment; detected $((memory_kib / 1024)) MiB." >&2
   resource_error=1
 fi
 work="${CRABRIX_TOOLCHAIN_WORK:-$root/work}"
@@ -35,11 +35,15 @@ if [[ ! "$free_disk_kib" =~ ^[0-9]+$ ]]; then
   echo "Could not determine free build disk space at $disk_path." >&2
   resource_error=1
 elif (( free_disk_kib < 30 * 1024 * 1024 )); then
-  echo "Production Rust/LLVM build requires at least 30 GiB free at $disk_path; detected $((free_disk_kib / 1024)) MiB." >&2
+  echo "Production Rust compiler build requires at least 30 GiB free at $disk_path; detected $((free_disk_kib / 1024)) MiB." >&2
   resource_error=1
 fi
 (( resource_error == 0 )) || exit 1
 if [[ "$mode" == --locked ]]; then
+  [[ -z "$(git -C "$root" status --porcelain --untracked-files=normal)" ]] || {
+    echo "Release builder checkout must be clean and committed" >&2
+    exit 1
+  }
   python3 "$root/scripts/validate-lock.py"
 else
   echo "Candidate build inputs are source-pinned; release environment lock is incomplete." >&2

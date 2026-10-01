@@ -8,4 +8,8 @@ if [[ -e "$work/.candidate-build" ]]; then
   echo "Candidate build outputs cannot be packaged; build --locked in a fresh work directory." >&2
   exit 1
 fi
+[[ -z "$(git -C "$root" status --porcelain --untracked-files=normal)" ]] || {
+  echo "Release builder checkout must be clean and committed" >&2
+  exit 1
+}
 python3 "$root/scripts/package_toolchain.py"

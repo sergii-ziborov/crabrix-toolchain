@@ -2,15 +2,18 @@
 """Package an already source-built compiler and WASI sysroot reproducibly."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-WORK = Path(__import__("os").environ.get("CRABRIX_TOOLCHAIN_WORK", ROOT / "work"))
+WORK = Path(os.environ.get("CRABRIX_TOOLCHAIN_WORK", ROOT / "work"))
 RUST = WORK / "rust"
-OUT = ROOT / "dist"
+CANDIDATE = os.environ.get("CRABRIX_TOOLCHAIN_CANDIDATE") == "1"
+OUT = Path(os.environ.get("CRABRIX_TOOLCHAIN_OUT", ROOT / "dist"))
 CRATES = {
     "std", "core", "alloc", "compiler_builtins", "panic_abort", "panic_unwind", "wasi",
     "cfg_if", "rustc_demangle", "std_detect", "hashbrown", "rustc_std_workspace_core",
@@ -59,6 +62,10 @@ def write_sysroot_archive(files, destination):
 
 
 def main():
+    if CANDIDATE and OUT.resolve() != (WORK / "candidate-artifacts").resolve():
+        raise SystemExit("candidate artifacts must stay in the work directory")
+    if not CANDIDATE and OUT.resolve() != (ROOT / "dist").resolve():
+        raise SystemExit("release artifacts must use the dist directory")
     if not RUST.is_dir():
         raise SystemExit("run fetch-sources.sh and build-toolchain.sh first")
     compiler = unique((p for p in RUST.glob("build/**/rustc.wasm")
@@ -102,12 +109,26 @@ def main():
     (OUT / "sysroot-files.json").write_text(json.dumps(inventory, indent=2) + "\n")
     (OUT / "sysroot-wasip1.sha256").write_text(digest(OUT / "sysroot-wasip1.zip") + "\n")
     lock = json.loads((ROOT / "toolchain.lock.json").read_text())
+    builder_commit = subprocess.check_output(
+        ["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True
+    ).strip()
+    builder_dirty = bool(subprocess.check_output(
+        ["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=normal"],
+        text=True,
+    ).strip())
     provenance = {"schemaVersion": 1, "sourceLockSHA256": digest(ROOT / "toolchain.lock.json"),
                   "rustRevision": lock["rust"]["revision"],
                   "rustVersion": lock["rust"]["actualVersion"],
-                  "builderRevision": lock["builder"]["revision"],
-                  "outputTarget": "wasm32-wasip1", "stripApplied": False}
+                  "builderUpstreamRevision": lock["builder"]["revision"],
+                  "builderSourceCommit": builder_commit,
+                  "builderWorkingTreeDirty": builder_dirty,
+                  "outputTarget": "wasm32-wasip1", "stripApplied": False,
+                  "candidate": CANDIDATE}
     (OUT / "toolchain-provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
+    if CANDIDATE:
+        (OUT / "CANDIDATE-NOT-FOR-RELEASE.txt").write_text(
+            "Trial output from incomplete release-environment lock. Do not publish or bundle in a release.\n"
+        )
     sums = [f"{digest(p)}  {p.name}" for p in sorted(OUT.iterdir()) if p.is_file()]
     (OUT / "SHA256SUMS").write_text("\n".join(sums) + "\n")
     print(f"Packaged {len(files)} verified source-built WASI sysroot files")

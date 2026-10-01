@@ -35,6 +35,8 @@ Production build sequence on a controlled Linux x86_64 host with enough RAM and 
 
 The release sequence is intentionally fail-closed while `buildEnvironment.imageDigest` is unresolved. `fetch-sources.sh --locked` can materialize pinned Rust source, submodules, SDK and bootstrap compiler inputs for investigation. `vendor-deps.sh --locked` is the explicit network phase for Rust workspace crates; the later build requires its vendor tree and runs Cargo offline. Once the resource preflight passes, `./scripts/build-toolchain.sh --candidate` permits a trial source build with the pinned source inputs while the release environment lock is being finalized. It marks that work directory as a candidate before compilation. Release packaging refuses candidate outputs even if the lock is filled later; run `--locked` in a fresh work directory for a publishable build. These commands are not presented as a completed smoke result.
 
+After a successful candidate build, `./scripts/stage-candidate.sh` creates test-only artifacts under ignored `work/candidate-artifacts/`, with an explicit candidate marker and provenance flag. It never writes `dist/` and cannot serve as a release package. This permits app compatibility probes before the controlled release build.
+
 ### Docker build host
 
 The repository includes a candidate Linux x86_64 build environment in [`docker/Dockerfile`](docker/Dockerfile). Its Ubuntu base is pinned by an amd64 manifest digest. Build the image and verify the source lock on a Docker host:
