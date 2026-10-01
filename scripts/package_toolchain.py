@@ -30,13 +30,6 @@ def digest(path):
     return h.hexdigest()
 
 
-def unique(paths, description):
-    candidates = sorted(set(paths))
-    if len(candidates) != 1:
-        raise SystemExit(f"expected one {description}, found {len(candidates)}: {candidates[:4]}")
-    return candidates[0]
-
-
 def write_sysroot_archive(files, destination):
     """Write the app-readable manifest and return a per-file byte inventory."""
     prefix = "sysroot-wasip1/"
@@ -68,14 +61,18 @@ def main():
         raise SystemExit("release artifacts must use the dist directory")
     if not RUST.is_dir():
         raise SystemExit("run fetch-sources.sh and build-toolchain.sh first")
-    compiler = unique((p for p in RUST.glob("build/**/rustc.wasm")
-                       if "stage2" in p.parts or "dist" in p.parts), "source-built rustc.wasm")
+    # The pinned bootstrap config installs into ./dist. Select that exact output,
+    # never a stage0 compiler or a stale dry-run/build artifact found by a glob.
+    compiler = RUST / "dist/bin/rustc.wasm"
+    if not compiler.is_file() or compiler.is_symlink():
+        raise SystemExit(f"installed source-built rustc.wasm is missing: {compiler}")
     with compiler.open("rb") as stream:
         magic = stream.read(8)
     if magic != b"\0asm\1\0\0\0":
         raise SystemExit("rustc.wasm has invalid Wasm header")
-    lib = unique((p for p in RUST.glob("build/**/stage1/lib/rustlib/wasm32-wasip1/lib")
-                  if p.is_dir()), "stage1 wasm32-wasip1 library")
+    lib = RUST / "build/x86_64-unknown-linux-gnu/stage1/lib/rustlib/wasm32-wasip1/lib"
+    if not lib.is_dir() or lib.is_symlink():
+        raise SystemExit(f"source-built stage1 WASI library is missing: {lib}")
     if OUT.exists() and any(OUT.iterdir()):
         raise SystemExit("dist must be empty; existing release files are immutable")
     OUT.mkdir(exist_ok=True)
