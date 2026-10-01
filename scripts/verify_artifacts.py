@@ -39,7 +39,10 @@ def verify_sysroot(directory):
                 or not SHA256.fullmatch(entry.get("sha256", "")):
             raise ValueError(f"invalid sysroot inventory entry: {name}")
         entries[name] = entry
-    if "manifest.json" not in entries:
+    manifest_name = "sysroot-wasip1/manifest.json"
+    if manifest_name not in entries or any(
+        not name.startswith("sysroot-wasip1/") for name in entries
+    ):
         raise ValueError("app-readable sysroot manifest missing")
     with zipfile.ZipFile(archive_path) as archive:
         infos = archive.infolist()
@@ -54,8 +57,10 @@ def verify_sysroot(directory):
             with archive.open(info) as source:
                 if digest_stream(source) != entry["sha256"]:
                     raise ValueError(f"sysroot ZIP digest mismatch: {info.filename}")
-        manifest = json.loads(archive.read("manifest.json"))
-        if manifest != {"files": sorted(set(entries) - {"manifest.json"})}:
+        manifest = json.loads(archive.read(manifest_name))
+        logical_files = sorted(name.removeprefix("sysroot-wasip1/")
+                               for name in set(entries) - {manifest_name})
+        if manifest != {"files": logical_files}:
             raise ValueError("app-readable sysroot manifest differs from inventory")
     return len(entries)
 

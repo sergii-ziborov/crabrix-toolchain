@@ -41,8 +41,10 @@ class PackageLayoutTests(unittest.TestCase):
             self.assertEqual(first.read_bytes(), second.read_bytes())
 
             with zipfile.ZipFile(first) as archive:
-                self.assertEqual(archive.namelist(), sorted([*files, "manifest.json"]))
-                manifest = json.loads(archive.read("manifest.json"))
+                self.assertEqual(archive.namelist(), sorted(
+                    "sysroot-wasip1/" + name for name in [*files, "manifest.json"]
+                ))
+                manifest = json.loads(archive.read("sysroot-wasip1/manifest.json"))
                 self.assertEqual(manifest, {"files": sorted(files)})
                 self.assertTrue(all(archive.getinfo(name).date_time == (1980, 1, 1, 0, 0, 0)
                                     for name in archive.namelist()))

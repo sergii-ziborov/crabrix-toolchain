@@ -36,20 +36,21 @@ def unique(paths, description):
 
 def write_sysroot_archive(files, destination):
     """Write the app-readable manifest and return a per-file byte inventory."""
+    prefix = "sysroot-wasip1/"
     manifest = (json.dumps({"files": sorted(files)}, sort_keys=True,
                            separators=(",", ":")) + "\n").encode("utf-8")
     inventory = [
-        {"path": name, "bytes": path.stat().st_size, "sha256": digest(path)}
+        {"path": prefix + name, "bytes": path.stat().st_size, "sha256": digest(path)}
         for name, path in sorted(files.items())
     ]
-    inventory.append({"path": "manifest.json", "bytes": len(manifest),
+    inventory.append({"path": prefix + "manifest.json", "bytes": len(manifest),
                       "sha256": hashlib.sha256(manifest).hexdigest()})
     inventory.sort(key=lambda item: item["path"])
     with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED,
                          compresslevel=9, strict_timestamps=True) as archive:
         for name in sorted([*files, "manifest.json"]):
             data = manifest if name == "manifest.json" else files[name].read_bytes()
-            info = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
+            info = zipfile.ZipInfo(prefix + name, (1980, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o100644 << 16
             archive.writestr(info, data, compress_type=zipfile.ZIP_DEFLATED,
