@@ -1,5 +1,5 @@
 diff --git a/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs b/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs
-index f0cb3c9a..258e842d 100644
+index f0cb3c9a..d28fb71b 100644
 --- a/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs
 +++ b/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs
 @@ -198,6 +198,20 @@ pub fn lower_inst(
@@ -57,3 +57,20 @@ index f0cb3c9a..258e842d 100644
                  (s, d) => bail!("ireduce {s} -> {d} unimplemented"),
              };
              cx.bind1(result, wv);
+@@ -1111,6 +1139,16 @@ fn lower_unary(
+         Opcode::Bswap => {
+             let result = dfg.first_result(inst);
+             let rty = dfg.value_type(result);
++            if rty == types::I128 {
++                // A full 128-bit byte swap reverses the order of the 64-bit
++                // halves and byte-swaps each half. A CLIF i128 is represented
++                // by two wasm i64 values, never by a single wasm value.
++                let (lo, hi) = cx.pair(arg)?;
++                let swapped_lo = bswap64(body, wb, hi);
++                let swapped_hi = bswap64(body, wb, lo);
++                cx.bind2(result, swapped_lo, swapped_hi);
++                return Ok(());
++            }
+             let v_in = cx.one(arg)?;
+             let wv = match rty {
+                 types::I16 => {

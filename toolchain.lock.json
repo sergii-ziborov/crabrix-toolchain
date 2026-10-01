@@ -67,7 +67,7 @@
   "patchDigests": [
     {
       "path": "patches/0001-integer-lowering.patch",
-      "sha256": "b2a3d2c76c670f738b09ea33f6d01c80336281d39e2c55b4e75106edd14458bc"
+      "sha256": "82f5d2dc47cb628475efcadda4db7ec738479f51039ab07882da9deddc234c2f"
     },
     {
       "path": "patches/0002-mulhi.patch",
