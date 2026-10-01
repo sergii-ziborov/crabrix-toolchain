@@ -64,6 +64,8 @@ def validate(lock, source_only=False):
     require_digest(bootstrap.get("configSourceSHA256"), "bootstrap.configSourceSHA256", errors)
     if bootstrap.get("codegenBackends") != ["cranelift"]:
         errors.append("bootstrap.codegenBackends: expected Cranelift-only compiler")
+    if bootstrap.get("craneliftGlobalAssembler") != "gnu-as":
+        errors.append("bootstrap.craneliftGlobalAssembler: expected pinned GNU assembler")
     if lock.get("wild", {}).get("used"):
         require_sha(lock["wild"].get("revision"), "wild.revision", errors)
     if lock.get("outputTargets") != ["wasm32-wasip1"]:

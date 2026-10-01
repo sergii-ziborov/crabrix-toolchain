@@ -19,38 +19,46 @@ PY
   echo "Rust source checkout differs from toolchain.lock.json" >&2
   exit 1
 }
-patch_relative="$(python3 - "$root/toolchain.lock.json" <<'PY'
+patch_relatives=()
+while IFS= read -r patch_relative; do
+  patch_relatives+=("$patch_relative")
+done < <(python3 - "$root/toolchain.lock.json" <<'PY'
 import json,sys
 paths=json.load(open(sys.argv[1]))['backend']['patches']
-if len(paths)!=1: raise SystemExit('this recipe expects one pinned backend patch')
-print(paths[0])
+if not paths: raise SystemExit('at least one pinned source patch is required')
+print('\n'.join(paths))
 PY
-)"
-patch="$root/$patch_relative"
-target="$(python3 - "$patch" <<'PY'
+)
+targets=()
+for patch_relative in "${patch_relatives[@]}"; do
+  patch="$root/$patch_relative"
+  target="$(python3 - "$patch" <<'PY'
 import pathlib,sys
 paths=[line[6:] for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith('+++ b/')]
 if len(paths)!=1 or paths[0].startswith('/') or '..' in pathlib.PurePosixPath(paths[0]).parts:
-    raise SystemExit('expected one relative backend patch target')
+    raise SystemExit('expected one relative source patch target')
 print(paths[0])
 PY
-)"
-if git -C "$rust" apply --reverse --check "$patch" 2>/dev/null; then
-  echo "Pinned backend patch already applied"
-else
-  git -C "$rust" apply --check "$patch"
-  git -C "$rust" apply "$patch"
-  echo "Applied pinned backend patch"
-fi
-git -C "$rust" diff --check -- "$target"
-if ! git -C "$rust" diff --binary -- "$target" | cmp -s - "$patch"; then
-  echo "Rust backend source differs from the exact pinned patch" >&2
-  exit 1
-fi
+  )"
+  if git -C "$rust" apply --reverse --check "$patch" 2>/dev/null; then
+    echo "Pinned source patch already applied: $patch_relative"
+  else
+    git -C "$rust" apply --check "$patch"
+    git -C "$rust" apply "$patch"
+    echo "Applied pinned source patch: $patch_relative"
+  fi
+  git -C "$rust" diff --check -- "$target"
+  if ! git -C "$rust" diff --binary -- "$target" | cmp -s - "$patch"; then
+    echo "Rust source differs from exact pinned patch: $patch_relative" >&2
+    exit 1
+  fi
+  targets+=("$target")
+done
 if [[ "$mode" == --locked ]]; then
-  changed="$(git -C "$rust" diff --name-only --ignore-submodules=all)"
-  [[ "$changed" == "$target" ]] || {
-    echo "Rust source has tracked changes beyond the pinned backend patch" >&2
+  changed="$(git -C "$rust" diff --name-only --ignore-submodules=all | LC_ALL=C sort)"
+  expected_changes="$(printf '%s\n' "${targets[@]}" | LC_ALL=C sort)"
+  [[ "$changed" == "$expected_changes" ]] || {
+    echo "Rust source has tracked changes beyond pinned source patches" >&2
     exit 1
   }
 fi

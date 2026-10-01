@@ -39,6 +39,7 @@ export WASI_SYSROOT="$sdk_dir/share/wasi-sysroot"
 export CARGO_HOME="$work/cargo-home"
 export RUSTUP_DIST_SERVER="file://$work/mirror"
 export CARGO_NET_OFFLINE=true
+export CG_CLIF_FORCE_GNU_AS=1
 export SOURCE_DATE_EPOCH="$(git -C "$work/rust" show -s --format=%ct HEAD)"
 export TZ=UTC
 export LC_ALL=C

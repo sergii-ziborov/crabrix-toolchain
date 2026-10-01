@@ -34,6 +34,16 @@ class SourceLockTests(unittest.TestCase):
         errors = VALIDATOR.validate(broken, source_only=True)
         self.assertTrue(any("file missing or SHA-256 mismatch" in error for error in errors))
 
+        broken = copy.deepcopy(self.lock)
+        broken["patchDigests"][1]["sha256"] = "0" * 64
+        errors = VALIDATOR.validate(broken, source_only=True)
+        self.assertTrue(any("file missing or SHA-256 mismatch" in error for error in errors))
+
+        broken = copy.deepcopy(self.lock)
+        broken["bootstrap"]["craneliftGlobalAssembler"] = "llvm"
+        errors = VALIDATOR.validate(broken, source_only=True)
+        self.assertTrue(any("craneliftGlobalAssembler" in error for error in errors))
+
     def test_release_lock_remains_closed_without_builder_identity(self):
         errors = VALIDATOR.validate(self.lock)
         self.assertTrue(any("imageDigest" in error for error in errors))

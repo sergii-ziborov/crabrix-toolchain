@@ -8,6 +8,7 @@
 - Added source lock validation and deterministic artifact packaging tools.
 - Selected a Cranelift-only candidate bootstrap after the matching CI LLVM archive became unavailable; an initial source LLVM attempt produced no toolchain artifact.
 - Added a digest-pinned backend patch for observed narrow integer conversion gaps; heavy-crate compatibility is pending a new compiler build and Check/Run results.
+- Added a second pinned source patch that installs the built Cranelift backend into the bootstrap sysroot, and selected GNU `as` for Cranelift inline assembly in the LLVM-free candidate build.
 - Made the deterministic sysroot ZIP compatible with the app's manifest reader and added a package-level ZIP/inventory verifier.
 - Added an isolated, explicitly marked candidate artifact staging path for compatibility tests; release builds require a clean committed builder checkout.
 - Added a pinned-base Linux x86_64 Docker candidate and an 8 GiB build preflight.

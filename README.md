@@ -10,7 +10,7 @@ The compiler is a Rust fork with Cranelift and in-process `riwl` linking. It run
 
 The recipe's CI LLVM archive for that source revision is no longer available. This candidate builds the target compiler with the pinned Cranelift backend and disables the separate `rustc_codegen_llvm` source build. The stage0 bootstrap compiler remains a verified prebuilt input. The exact backend selection is recorded in the lock. A controlled Linux x86_64 build environment must be pinned and the resulting compiler must pass the app's Check/Run/Cargo gates before a release can be made. There is currently **no Crabrix-produced release artifact**.
 
-The pinned backend patch in [PATCHES.md](PATCHES.md) adds narrow integer conversions needed by the observed `aho-corasick`, `regex-automata`, and `itoa` failures. These dependency graphs remain unverified until a newly built compiler passes the app's Check/Run gates.
+The pinned patches in [PATCHES.md](PATCHES.md) add narrow integer conversions needed by the observed `aho-corasick`, `regex-automata`, and `itoa` failures, and install the Cranelift backend into the bootstrap sysroot. This Cranelift-only build uses GNU `as` for inline assembly. These dependency graphs remain unverified until a newly built compiler passes the app's Check/Run gates.
 
 ## Commands
 

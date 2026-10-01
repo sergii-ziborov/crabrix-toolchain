@@ -1,0 +1,21 @@
+diff --git a/src/bootstrap/src/core/build_steps/compile.rs b/src/bootstrap/src/core/build_steps/compile.rs
+index 37c808cf..f39f1c0f 100644
+--- a/src/bootstrap/src/core/build_steps/compile.rs
++++ b/src/bootstrap/src/core/build_steps/compile.rs
+@@ -2480,9 +2480,13 @@ fn run(self, builder: &Builder<'_>) -> Compiler {
+                         // library sysroots, so that they are available for cg_gcc.
+                         dylib_set.install_to(builder, target_compiler);
+                     }
+-                    CodegenBackendKind::Cranelift
+-                    | CodegenBackendKind::Llvm
+-                    | CodegenBackendKind::Custom(_) => continue,
++                    CodegenBackendKind::Cranelift => {
++                        let stamp = builder.ensure(CraneliftCodegenBackend {
++                            compilers: prepare_compilers(),
++                        });
++                        copy_codegen_backends_to_sysroot(builder, stamp, target_compiler);
++                    }
++                    CodegenBackendKind::Llvm | CodegenBackendKind::Custom(_) => continue,
+                 }
+             }
+         }
