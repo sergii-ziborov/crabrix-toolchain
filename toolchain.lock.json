@@ -2,8 +2,7 @@
   "backend": {
     "name": "rustc_codegen_cranelift + in-tree Phase-B riwl",
     "patches": [
-      "patches/0001-narrow-integer-casts.patch",
-      "patches/0002-cranelift-bootstrap-sysroot.patch"
+      "patches/0001-narrow-integer-casts.patch"
     ],
     "revision": "abc48c0b8aba37d3f3862a9d5c76eb4e78f90e88"
   },
@@ -68,10 +67,6 @@
     {
       "path": "patches/0001-narrow-integer-casts.patch",
       "sha256": "bd89aa93825717a1f3cb71085bfce442f7431f6489fc78cea86ca12a9c5bbc37"
-    },
-    {
-      "path": "patches/0002-cranelift-bootstrap-sysroot.patch",
-      "sha256": "1f3bedc72b8e0813fef5e84b45589e94ffa16e05d6636764baaac801365b0ae5"
     }
   ],
   "rust": {

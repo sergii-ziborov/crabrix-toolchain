@@ -8,8 +8,4 @@ The previous app compiler failed while emitting `aho-corasick` (`uextend.i16` fr
 
 The patch applies cleanly to the selected source and its diff matches the locked file. Functional compatibility is **pending** a successful own compiler build followed by the app's real dependency Check/Run tests. Do not describe `regex` or `serde_json` as supported based on this source change alone. If this code is merged upstream, remove the patch in a separately tested source revision update.
 
-## 0002: install Cranelift into the bootstrap sysroot
-
-Source: `src/bootstrap/src/core/build_steps/compile.rs` at the same pinned Rust revision. A Cranelift-only trial found that bootstrap built `rustc_codegen_cranelift` but did not put it in the stage1 compiler's `codegen-backends` directory. This patch uses the existing backend build and sysroot-copy helpers before the standard-library step. The source-LLVM candidate retains the patch while both backends are enabled, and still sets `CG_CLIF_FORCE_GNU_AS=1` for Cranelift inline assembly. Whether the patch remains necessary with source LLVM is part of the bootstrap comparison.
-
-The patch is a bootstrap correction for this source-pinned candidate. A complete compiler and app compatibility result are still pending. Remove it if an unpatched source-LLVM bootstrap proves equivalent in a separate build and app gate.
+An earlier bootstrap sysroot patch was removed. It assumed Cranelift must be installed as a separate dynamic library, but the selected Rust fork's `rustc_features` enables Cranelift in `rustc-main` and `rustc_interface::get_codegen_backend` calls the linked backend directly. The WASI build produced only an `.rlib`; the patch caused bootstrap to panic while looking for a `.so`. The source LLVM candidate uses the unmodified upstream bootstrap path.

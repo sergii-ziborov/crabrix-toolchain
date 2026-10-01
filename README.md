@@ -10,7 +10,7 @@ The compiler is a Rust fork with Cranelift and in-process `riwl` linking. It run
 
 The recipe's CI LLVM archive for that source revision is no longer available. The current candidate therefore builds LLVM from the pinned Rust submodule and enables both LLVM and Cranelift backends. The stage0 bootstrap compiler remains a verified prebuilt input. The exact backend selection is recorded in the lock. A controlled Linux x86_64 build environment must be pinned and the resulting compiler must pass the app's Check/Run/Cargo gates before a release can be made. There is currently **no Crabrix-produced release artifact**.
 
-The pinned patches in [PATCHES.md](PATCHES.md) add narrow integer conversions needed by the observed `aho-corasick`, `regex-automata`, and `itoa` failures, and install the Cranelift backend into the bootstrap sysroot. GNU `as` remains selected for Cranelift inline assembly. A Cranelift-only trial could build the WASI sysroot only with many unresolved-symbol trap stubs, so that trial was stopped. These dependency graphs remain unverified until a newly built compiler passes the app's Check/Run gates.
+The pinned patch in [PATCHES.md](PATCHES.md) adds narrow integer conversions needed by the observed `aho-corasick`, `regex-automata`, and `itoa` failures. GNU `as` remains selected for Cranelift inline assembly. A Cranelift-only trial could build the WASI sysroot only with many unresolved-symbol trap stubs, so that trial was stopped. The earlier bootstrap sysroot patch was removed after it tried to install a dynamic Cranelift library for WASI, where this fork links the backend into the compiler statically. These dependency graphs remain unverified until a newly built compiler passes the app's Check/Run gates.
 
 ## Commands
 
