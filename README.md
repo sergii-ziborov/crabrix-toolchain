@@ -8,7 +8,9 @@ The compiler is a Rust fork with Cranelift and in-process `riwl` linking. It run
 
 [`toolchain.lock.json`](toolchain.lock.json) pins the builder and Rust source commits, 12 Git submodules, WASI SDK 32 digest, bootstrap Rust and rustfmt archives, target, and packaging version. Archive digests are also checked against the selected Rust source's `src/stage0`. The selected Rust revision is `abc48c0b8aba37d3f3862a9d5c76eb4e78f90e88`, which declares version `1.96.0-dev`. Its association with the old `artifacts-test-7` binary is an inference from the July 2026 workflow chronology, not proven binary provenance.
 
-The recipe's CI LLVM archive for that source revision is no longer available. This fork selects the pinned LLVM source submodule instead. A controlled Linux x86_64 build environment must be pinned and the resulting compiler must pass the app's Check/Run/Cargo gates before a release can be made. There is currently **no Crabrix-produced release artifact**.
+The recipe's CI LLVM archive for that source revision is no longer available. This fork selects the pinned LLVM source submodule instead. Its source build enables the X86 and WebAssembly targets needed by this bootstrap pipeline, with experimental targets disabled; these options are recorded in the lock. A controlled Linux x86_64 build environment must be pinned and the resulting compiler must pass the app's Check/Run/Cargo gates before a release can be made. There is currently **no Crabrix-produced release artifact**.
+
+The pinned backend patch in [PATCHES.md](PATCHES.md) adds narrow integer conversions needed by the observed `aho-corasick`, `regex-automata`, and `itoa` failures. These dependency graphs remain unverified until a newly built compiler passes the app's Check/Run gates.
 
 ## Commands
 
@@ -24,6 +26,7 @@ Production build sequence on a controlled Linux x86_64 host with enough RAM and 
 ./scripts/doctor.sh
 ./scripts/fetch-sources.sh --locked
 ./scripts/vendor-deps.sh --locked
+./scripts/apply-patches.sh --locked
 ./scripts/build-toolchain.sh --locked
 ./scripts/package-toolchain.sh --deterministic
 ./scripts/verify-artifacts.sh

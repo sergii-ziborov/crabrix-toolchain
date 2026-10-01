@@ -1,7 +1,9 @@
 {
   "backend": {
     "name": "rustc_codegen_cranelift + in-tree Phase-B riwl",
-    "patches": [],
+    "patches": [
+      "patches/0001-narrow-integer-casts.patch"
+    ],
     "revision": "abc48c0b8aba37d3f3862a9d5c76eb4e78f90e88"
   },
   "bootstrap": {
@@ -22,9 +24,14 @@
     },
     "configSourceSHA256": "0c5a1993f61a29efbca1aa3241c7e51f0108fe63333629d1716c48dc98566454",
     "llvm": {
+      "experimentalTargets": [],
       "mode": "source",
       "reason": "The matching upstream CI LLVM archive returned 404 on 2026-09-30; build the pinned src/llvm-project submodule instead.",
-      "sourceCommit": "1cb4e3833c1919c2e6fb579a23ac0e2b22587b7e"
+      "sourceCommit": "1cb4e3833c1919c2e6fb579a23ac0e2b22587b7e",
+      "targets": [
+        "X86",
+        "WebAssembly"
+      ]
     },
     "rustfmt": {
       "date": "2026-03-05",
@@ -52,7 +59,12 @@
     "wasm32-wasip1"
   ],
   "packagingFormatVersion": 1,
-  "patchDigests": [],
+  "patchDigests": [
+    {
+      "path": "patches/0001-narrow-integer-casts.patch",
+      "sha256": "bd89aa93825717a1f3cb71085bfce442f7431f6489fc78cea86ca12a9c5bbc37"
+    }
+  ],
   "rust": {
     "actualVersion": "1.96.0-dev",
     "commitDate": "2026-07-22T01:34:27Z",

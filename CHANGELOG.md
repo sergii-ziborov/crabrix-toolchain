@@ -7,6 +7,8 @@
 - Removed floating-branch and wild default-branch build paths.
 - Added source lock validation and deterministic artifact packaging tools.
 - Selected pinned source LLVM after the matching CI archive became unavailable.
+- Restricted the source LLVM build to the X86 and WebAssembly targets required by this bootstrap pipeline.
+- Added a digest-pinned backend patch for observed narrow integer conversion gaps; heavy-crate compatibility is pending a new compiler build and Check/Run results.
 - Added a pinned-base Linux x86_64 Docker candidate and an 8 GiB build preflight.
 - Verified the Rust source, WASI SDK, bootstrap archives and offline Cargo vendor tree; the extra rustfmt bootstrap archives are now locked.
 - Recorded the input-preparation evidence in `docs/BUILD-STATUS-2026-09-30.md`.

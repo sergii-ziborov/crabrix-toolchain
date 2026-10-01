@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fail closed on unresolved or floating build inputs."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -30,6 +31,26 @@ def validate(lock, source_only=False):
             errors.append(f"{name}.url: expected HTTPS Git source")
         require_sha(item.get("revision"), f"{name}.revision", errors)
     require_sha(lock.get("backend", {}).get("revision"), "backend.revision", errors)
+    patches = lock.get("backend", {}).get("patches")
+    records = lock.get("patchDigests")
+    if not isinstance(patches, list) or not isinstance(records, list):
+        errors.append("backend.patches/patchDigests: expected lists")
+    elif [item.get("path") for item in records if isinstance(item, dict)] != patches or len(records) != len(patches):
+        errors.append("patchDigests: paths must match backend.patches in order")
+    else:
+        for item in records:
+            relative = item["path"]
+            if not isinstance(relative, str):
+                errors.append("patchDigests.path: expected relative path")
+                continue
+            path = Path(relative)
+            if path.is_absolute() or path.parts[:1] != ("patches",) or ".." in path.parts:
+                errors.append(f"patchDigests[{relative}]: invalid path")
+                continue
+            require_digest(item.get("sha256"), f"patchDigests[{relative}].sha256", errors)
+            source = Path(__file__).resolve().parents[1] / path
+            if not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != item.get("sha256"):
+                errors.append(f"patchDigests[{relative}]: file missing or SHA-256 mismatch")
     submodules = lock.get("submodules", {})
     if not submodules:
         errors.append("submodules: empty")
@@ -76,6 +97,10 @@ def validate(lock, source_only=False):
         require_sha(llvm.get("sourceCommit"), "bootstrap.llvm.sourceCommit", errors)
         if llvm.get("sourceCommit") != submodules.get("src/llvm-project"):
             errors.append("bootstrap.llvm.sourceCommit: must match pinned LLVM submodule")
+        if llvm.get("targets") != ["X86", "WebAssembly"]:
+            errors.append("bootstrap.llvm.targets: expected X86 and WebAssembly")
+        if llvm.get("experimentalTargets") != []:
+            errors.append("bootstrap.llvm.experimentalTargets: expected an empty list")
     else:
         errors.append("bootstrap.llvm.mode: expected ci-prebuilt or source")
     if lock.get("packagingFormatVersion") != 1:
