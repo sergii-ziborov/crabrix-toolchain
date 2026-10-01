@@ -57,9 +57,12 @@ class PackageLayoutTests(unittest.TestCase):
                 "schemaVersion": 1, "files": inventory,
             }))
             checksum = root / "sysroot-wasip1.sha256"
-            checksum.write_text(hashlib.sha256(first.read_bytes()).hexdigest() + "\n")
+            checksum.write_text(hashlib.sha256(first.read_bytes()).hexdigest())
             self.assertEqual(VERIFIER.verify_sysroot(root), len(inventory))
-            checksum.write_text("0" * 64 + "\n")
+            checksum.write_text(hashlib.sha256(first.read_bytes()).hexdigest() + "\n")
+            with self.assertRaisesRegex(ValueError, "invalid sysroot ZIP checksum"):
+                VERIFIER.verify_sysroot(root)
+            checksum.write_text("0" * 64)
             with self.assertRaisesRegex(ValueError, "checksum mismatch"):
                 VERIFIER.verify_sysroot(root)
 

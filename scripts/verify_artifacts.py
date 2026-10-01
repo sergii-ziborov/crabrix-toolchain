@@ -20,7 +20,7 @@ def digest_stream(stream):
 
 def verify_sysroot(directory):
     archive_path = directory / "sysroot-wasip1.zip"
-    expected_zip = (directory / "sysroot-wasip1.sha256").read_text().strip()
+    expected_zip = (directory / "sysroot-wasip1.sha256").read_text()
     if not SHA256.fullmatch(expected_zip):
         raise ValueError("invalid sysroot ZIP checksum")
     with archive_path.open("rb") as source:

@@ -104,7 +104,9 @@ def main():
     inventory = {"schemaVersion": 1,
                  "files": write_sysroot_archive(files, OUT / "sysroot-wasip1.zip")}
     (OUT / "sysroot-files.json").write_text(json.dumps(inventory, indent=2) + "\n")
-    (OUT / "sysroot-wasip1.sha256").write_text(digest(OUT / "sysroot-wasip1.zip") + "\n")
+    # BundledSysroot.prepare compares this file byte-for-byte with the digest.
+    # Keep the app's existing 64-byte checksum convention: no trailing newline.
+    (OUT / "sysroot-wasip1.sha256").write_text(digest(OUT / "sysroot-wasip1.zip"))
     lock = json.loads((ROOT / "toolchain.lock.json").read_text())
     builder_commit = subprocess.check_output(
         ["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True
