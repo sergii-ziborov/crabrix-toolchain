@@ -3,7 +3,8 @@
     "name": "rustc_codegen_cranelift + in-tree Phase-B riwl",
     "patches": [
       "patches/0001-integer-lowering.patch",
-      "patches/0002-mulhi.patch"
+      "patches/0002-mulhi.patch",
+      "patches/0003-icmp-imm-i128.patch"
     ],
     "revision": "abc48c0b8aba37d3f3862a9d5c76eb4e78f90e88"
   },
@@ -72,6 +73,10 @@
     {
       "path": "patches/0002-mulhi.patch",
       "sha256": "26beac138118262d2058f58bfce3fd421f208d20afdb506055c841ff2e3f779d"
+    },
+    {
+      "path": "patches/0003-icmp-imm-i128.patch",
+      "sha256": "091117dc3a1355d5f6c05cff34d9b4ceccaa6fb23e1dc26847012d3cdf4e694a"
     }
   ],
   "rust": {

@@ -14,6 +14,12 @@ Source: `compiler/rustc_codegen_cranelift/clif2wasm/src/i128_lower.rs` in the sa
 
 Core Wasm has no widening i64 multiply. This patch exposes the already used carry-correct 32-bit partial-product calculation as `umulhi64` and derives the signed high half by subtracting one cross term for each negative operand. The signed and unsigned arithmetic was compared with independent Python arbitrary-precision products for 20,100 edge and seeded random pairs. The rebuilt Wasm compiler then passed an app-level checked-multiplication regression that had failed on the first candidate with `smulhi.i64`.
 
-If either change is merged upstream, remove its patch in a separately tested source revision update. The app gates above establish the tested `clap` and `regex` versions only. They do not establish `serde_json`, whose current `serde_core` needs build-script generated output.
+## 0003: sign-extended i128 immediate comparison
+
+Source: `compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs` in the same pinned Rust fork. The exact patch bytes and SHA-256 are recorded in the lock. The patch applicator validates the cumulative final source blob because patches 0001 and 0003 touch this file.
+
+A multi-file route planner using `petgraph 0.8.3` reached codegen and failed at `icmp_imm.i128 slt ... 0` while compiling `core::num::overflowing_add`. CLIF's 64-bit immediate is sign-extended to an i128 operand. This patch constructs the low and high Wasm i64 halves, then uses the existing pairwise `i128_lower::icmp` logic. A direct signed-comparison/overflow regression and the route planner are required gates for the next candidate; neither had passed when this patch was written.
+
+If any change is merged upstream, remove its patch in a separately tested source revision update. The completed app gates above establish the tested `clap` and `regex` versions only. They do not establish `serde_json`, whose current `serde_core` needs build-script generated output.
 
 An earlier bootstrap sysroot patch was removed. It assumed Cranelift must be installed as a separate dynamic library, but the selected Rust fork's `rustc_features` enables Cranelift in `rustc-main` and `rustc_interface::get_codegen_backend` calls the linked backend directly. The WASI build produced only an `.rlib`; the patch caused bootstrap to panic while looking for a `.so`. The source LLVM candidate uses the unmodified upstream bootstrap path.
