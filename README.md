@@ -50,7 +50,7 @@ docker run --rm --platform linux/amd64 \
 
 The local image is a candidate, not the release build environment. Record and distribute its completed image digest before filling `buildEnvironment.imageDigest`; the lock must identify the exact image used for a source build. On Apple Silicon, Docker can run this x86_64 image through emulation, but the Docker VM still needs enough RAM and disk for Rust. The [Rust compiler development guide](https://rustc-dev-guide.rust-lang.org/building/prerequisites.html) recommends at least 8 GB RAM and 30 GB free disk for a compiler build. Do not infer a successful compiler build from a passing image or source-lock check.
 
-`package-toolchain.sh` emits unstripped `rustc.wasm`, deterministic `sysroot-wasip1.zip`, per-file SHA-256 inventory, source provenance and checksums after a successful own build. Signing is a separate protected release step. No source-built output is copied from the previous `artifacts-test-7` release.
+`package-toolchain.sh` emits unstripped `rustc.wasm`, deterministic `sysroot-wasip1.zip` with an app-readable manifest, per-file SHA-256 inventory, ZIP checksum, source provenance and checksums after a successful own build. `verify-artifacts.sh` checks the ZIP contents against both inventories. Signing is a separate protected release step. No source-built output is copied from the previous `artifacts-test-7` release.
 
 ## Compatibility and verification
 

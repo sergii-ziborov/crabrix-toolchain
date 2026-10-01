@@ -34,6 +34,29 @@ def unique(paths, description):
     return candidates[0]
 
 
+def write_sysroot_archive(files, destination):
+    """Write the app-readable manifest and return a per-file byte inventory."""
+    manifest = (json.dumps({"files": sorted(files)}, sort_keys=True,
+                           separators=(",", ":")) + "\n").encode("utf-8")
+    inventory = [
+        {"path": name, "bytes": path.stat().st_size, "sha256": digest(path)}
+        for name, path in sorted(files.items())
+    ]
+    inventory.append({"path": "manifest.json", "bytes": len(manifest),
+                      "sha256": hashlib.sha256(manifest).hexdigest()})
+    inventory.sort(key=lambda item: item["path"])
+    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED,
+                         compresslevel=9, strict_timestamps=True) as archive:
+        for name in sorted([*files, "manifest.json"]):
+            data = manifest if name == "manifest.json" else files[name].read_bytes()
+            info = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o100644 << 16
+            archive.writestr(info, data, compress_type=zipfile.ZIP_DEFLATED,
+                             compresslevel=9)
+    return inventory
+
+
 def main():
     if not RUST.is_dir():
         raise SystemExit("run fetch-sources.sh and build-toolchain.sh first")
@@ -73,19 +96,10 @@ def main():
         raise SystemExit("std rlib is missing")
     if "lib/rustlib/wasm32-wasip1/lib/self-contained/crt1-command.o" not in files:
         raise SystemExit("self-contained WASI crt is missing")
-    inventory = {"schemaVersion": 1, "files": [
-        {"path": name, "bytes": path.stat().st_size, "sha256": digest(path)}
-        for name, path in sorted(files.items())
-    ]}
+    inventory = {"schemaVersion": 1,
+                 "files": write_sysroot_archive(files, OUT / "sysroot-wasip1.zip")}
     (OUT / "sysroot-files.json").write_text(json.dumps(inventory, indent=2) + "\n")
-    with zipfile.ZipFile(OUT / "sysroot-wasip1.zip", "w", compression=zipfile.ZIP_DEFLATED,
-                         compresslevel=9, strict_timestamps=True) as archive:
-        for name, path in sorted(files.items()):
-            info = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = 0o100644 << 16
-            archive.writestr(info, path.read_bytes(), compress_type=zipfile.ZIP_DEFLATED,
-                             compresslevel=9)
+    (OUT / "sysroot-wasip1.sha256").write_text(digest(OUT / "sysroot-wasip1.zip") + "\n")
     lock = json.loads((ROOT / "toolchain.lock.json").read_text())
     provenance = {"schemaVersion": 1, "sourceLockSHA256": digest(ROOT / "toolchain.lock.json"),
                   "rustRevision": lock["rust"]["revision"],

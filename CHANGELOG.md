@@ -8,6 +8,7 @@
 - Added source lock validation and deterministic artifact packaging tools.
 - Selected a Cranelift-only candidate bootstrap after the matching CI LLVM archive became unavailable; an initial source LLVM attempt produced no toolchain artifact.
 - Added a digest-pinned backend patch for observed narrow integer conversion gaps; heavy-crate compatibility is pending a new compiler build and Check/Run results.
+- Made the deterministic sysroot ZIP compatible with the app's manifest reader and added a package-level ZIP/inventory verifier.
 - Added a pinned-base Linux x86_64 Docker candidate and an 8 GiB build preflight.
 - Verified the Rust source, WASI SDK, bootstrap archives and offline Cargo vendor tree; the extra rustfmt bootstrap archives are now locked.
 - Recorded the input-preparation evidence in `docs/BUILD-STATUS-2026-09-30.md`.
