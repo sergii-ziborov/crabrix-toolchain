@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORK = Path(os.environ.get("CRABRIX_TOOLCHAIN_WORK", ROOT / "work"))
 RUST = WORK / "rust"
 CANDIDATE = os.environ.get("CRABRIX_TOOLCHAIN_CANDIDATE") == "1"
+STRIP_EXPERIMENT = os.environ.get("CRABRIX_TOOLCHAIN_STRIP_EXPERIMENT") == "1"
 OUT = Path(os.environ.get("CRABRIX_TOOLCHAIN_OUT", ROOT / "dist"))
 CRATES = {
     "std", "core", "alloc", "compiler_builtins", "panic_abort", "panic_unwind", "wasi",
@@ -55,6 +56,8 @@ def write_sysroot_archive(files, destination):
 
 
 def main():
+    if STRIP_EXPERIMENT and not CANDIDATE:
+        raise SystemExit("debug-section stripping is candidate-only until app gates pass")
     if CANDIDATE and OUT.resolve() != (WORK / "candidate-artifacts").resolve():
         raise SystemExit("candidate artifacts must stay in the work directory")
     if not CANDIDATE and OUT.resolve() != (ROOT / "dist").resolve():
@@ -76,7 +79,13 @@ def main():
     if OUT.exists() and any(OUT.iterdir()):
         raise SystemExit("dist must be empty; existing release files are immutable")
     OUT.mkdir(exist_ok=True)
-    shutil.copyfile(compiler, OUT / "rustc.wasm")
+    if STRIP_EXPERIMENT:
+        subprocess.run([
+            sys.executable, str(ROOT / "scripts/strip-wasm-custom.py"),
+            str(compiler), str(OUT / "rustc.wasm"),
+        ], check=True)
+    else:
+        shutil.copyfile(compiler, OUT / "rustc.wasm")
     files = {}
     for path in sorted(lib.rglob("*")):
         if path.is_symlink():
@@ -121,8 +130,11 @@ def main():
                   "builderUpstreamRevision": lock["builder"]["revision"],
                   "builderSourceCommit": builder_commit,
                   "builderWorkingTreeDirty": builder_dirty,
-                  "outputTarget": "wasm32-wasip1", "stripApplied": False,
+                  "outputTarget": "wasm32-wasip1", "stripApplied": STRIP_EXPERIMENT,
                   "candidate": CANDIDATE}
+    if STRIP_EXPERIMENT:
+        provenance["stripInputSHA256"] = digest(compiler)
+        provenance["stripPolicy"] = "remove name and .debug_*; retain producers"
     (OUT / "toolchain-provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
     if CANDIDATE:
         (OUT / "CANDIDATE-NOT-FOR-RELEASE.txt").write_text(

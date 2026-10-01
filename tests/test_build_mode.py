@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -10,6 +11,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class BuildModeTests(unittest.TestCase):
+    def test_debug_section_strip_cannot_enter_release_packaging(self):
+        environment = os.environ.copy()
+        environment.pop("CRABRIX_TOOLCHAIN_CANDIDATE", None)
+        environment["CRABRIX_TOOLCHAIN_STRIP_EXPERIMENT"] = "1"
+        result = subprocess.run(
+            ["python3", str(ROOT / "scripts/package_toolchain.py")],
+            env=environment, capture_output=True, text=True, check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("candidate-only", result.stderr)
+
     def test_candidate_outputs_cannot_be_packaged_after_lock_completion(self):
         with tempfile.TemporaryDirectory(prefix="crabrix-package-guard-") as temporary:
             root = Path(temporary)
