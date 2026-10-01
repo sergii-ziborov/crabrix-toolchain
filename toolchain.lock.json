@@ -8,7 +8,9 @@
     "revision": "abc48c0b8aba37d3f3862a9d5c76eb4e78f90e88"
   },
   "bootstrap": {
+    "buildJobs": 3,
     "codegenBackends": [
+      "llvm",
       "cranelift"
     ],
     "craneliftGlobalAssembler": "gnu-as",
@@ -29,9 +31,12 @@
     },
     "configSourceSHA256": "0c5a1993f61a29efbca1aa3241c7e51f0108fe63333629d1716c48dc98566454",
     "llvm": {
-      "mode": "disabled",
-      "reason": "The pinned Cranelift-only bootstrap does not build rustc_codegen_llvm; the unavailable CI LLVM archive is not used.",
-      "sourceCommit": "1cb4e3833c1919c2e6fb579a23ac0e2b22587b7e"
+      "mode": "source",
+      "sourceCommit": "1cb4e3833c1919c2e6fb579a23ac0e2b22587b7e",
+      "targets": [
+        "X86",
+        "WebAssembly"
+      ]
     },
     "rustfmt": {
       "date": "2026-03-05",

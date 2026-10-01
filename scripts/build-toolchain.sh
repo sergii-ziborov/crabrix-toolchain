@@ -9,9 +9,9 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 "$root/scripts/doctor.sh" "$mode"
 work="${CRABRIX_TOOLCHAIN_WORK:-$root/work}"
 [[ -d "$work/rust/.git" ]] || { echo "run fetch-sources.sh --locked first" >&2; exit 1; }
-read -r expected_sha sdk_name < <(python3 - "$root/toolchain.lock.json" <<'PY'
+read -r expected_sha sdk_name build_jobs < <(python3 - "$root/toolchain.lock.json" <<'PY'
 import json,sys
-x=json.load(open(sys.argv[1]));print(x['rust']['revision'],x['wasiSDK']['url'].rsplit('/',1)[-1])
+x=json.load(open(sys.argv[1]));print(x['rust']['revision'],x['wasiSDK']['url'].rsplit('/',1)[-1],x['bootstrap']['buildJobs'])
 PY
 )
 [[ "$(git -C "$work/rust" rev-parse HEAD)" == "$expected_sha" ]] || {
@@ -49,15 +49,24 @@ print(json.dumps(json.load(open(sys.argv[1]))['bootstrap']['codegenBackends'],se
 PY
 )"
 codegen_args=(--set "rust.codegen-backends=$codegen_backends")
+llvm_targets="$(python3 - "$root/toolchain.lock.json" <<'PY'
+import json,sys
+print(';'.join(json.load(open(sys.argv[1]))['bootstrap']['llvm']['targets']))
+PY
+)"
+llvm_args=(--set "llvm.targets=$llvm_targets" --set "llvm.experimental-targets=")
 mkdir -p "$work/logs"
 (
   cd "$work/rust"
   env -u GITHUB_ACTIONS -u CI python3 x.py install \
-    --set build.vendor=true --set llvm.download-ci-llvm=false "${codegen_args[@]}" \
+    --jobs "$build_jobs" \
+    --set build.vendor=true --set llvm.download-ci-llvm=false \
+    "${llvm_args[@]}" "${codegen_args[@]}" \
     2>&1 | tee "$work/logs/rustc-build.log"
   env -u GITHUB_ACTIONS -u CI python3 x.py build library \
-    --target wasm32-wasip1 --stage 1 \
-    --set build.vendor=true --set llvm.download-ci-llvm=false "${codegen_args[@]}" \
+    --target wasm32-wasip1 --stage 1 --jobs "$build_jobs" \
+    --set build.vendor=true --set llvm.download-ci-llvm=false \
+    "${llvm_args[@]}" "${codegen_args[@]}" \
     2>&1 | tee "$work/logs/wasip1-sysroot-build.log"
 )
 if [[ "$mode" == --candidate ]]; then

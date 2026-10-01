@@ -62,8 +62,10 @@ def validate(lock, source_only=False):
     require_digest(sdk.get("sha256"), "wasiSDK.sha256", errors)
     bootstrap = lock.get("bootstrap", {})
     require_digest(bootstrap.get("configSourceSHA256"), "bootstrap.configSourceSHA256", errors)
-    if bootstrap.get("codegenBackends") != ["cranelift"]:
-        errors.append("bootstrap.codegenBackends: expected Cranelift-only compiler")
+    if bootstrap.get("buildJobs") != 3:
+        errors.append("bootstrap.buildJobs: expected the pinned three-job build")
+    if bootstrap.get("codegenBackends") != ["llvm", "cranelift"]:
+        errors.append("bootstrap.codegenBackends: expected pinned LLVM and Cranelift backends")
     if bootstrap.get("craneliftGlobalAssembler") != "gnu-as":
         errors.append("bootstrap.craneliftGlobalAssembler: expected pinned GNU assembler")
     if lock.get("wild", {}).get("used"):
