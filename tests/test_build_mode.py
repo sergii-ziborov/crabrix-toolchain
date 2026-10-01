@@ -16,6 +16,7 @@ class BuildModeTests(unittest.TestCase):
             (root / "scripts").mkdir()
             for name in ("package-toolchain.sh", "validate-lock.py"):
                 shutil.copy2(ROOT / "scripts" / name, root / "scripts" / name)
+            shutil.copytree(ROOT / "patches", root / "patches")
 
             # The synthetic environment identity reaches the packaging guard.
             # It is never used to build or publish an artifact.
