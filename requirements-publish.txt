@@ -1,0 +1,4 @@
+# Publish and verification utility only; normal source builds do not need this.
+cryptography==46.0.5
+cffi==2.1.1
+pycparser==3.0
