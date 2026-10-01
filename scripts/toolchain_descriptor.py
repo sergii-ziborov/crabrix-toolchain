@@ -47,6 +47,8 @@ def inventory(directory):
             raise ValueError(f"release symlink rejected: {path}")
         if not path.is_file():
             continue
+        if path.stat().st_nlink != 1:
+            raise ValueError(f"release hardlink rejected: {path}")
         name = path.relative_to(directory).as_posix()
         if name == "toolchain.descriptor.json":
             continue
@@ -77,7 +79,10 @@ def release_identity(directory):
         raise ValueError("release provenance does not match this source lock")
     if provenance.get("rustRevision") != lock["rust"]["revision"]:
         raise ValueError("release Rust revision differs from this source lock")
-    if not lock["buildEnvironment"]["imageDigest"] or not lock["buildEnvironment"]["hostToolVersions"]:
+    image_digest = lock["buildEnvironment"]["imageDigest"]
+    if (not isinstance(image_digest, str) or not image_digest.startswith("sha256:")
+            or not SHA256.fullmatch(image_digest[7:])
+            or not lock["buildEnvironment"]["hostToolVersions"]):
         raise ValueError("release environment lock is incomplete")
     return provenance, lock
 
@@ -96,15 +101,25 @@ def require_compatibility(directory):
     gates = compatibility.get("gates")
     if not isinstance(gates, list):
         raise ValueError("compatibility results lack gates")
-    statuses = {}
+    recorded = {}
     for gate in gates:
         if not isinstance(gate, dict) or not isinstance(gate.get("id"), str):
             raise ValueError("invalid compatibility gate")
-        if gate["id"] in statuses:
+        if gate["id"] in recorded:
             raise ValueError(f'duplicate compatibility gate: {gate["id"]}')
-        statuses[gate["id"]] = gate.get("status")
-    if any(statuses.get(f"T{number:02d}") != "passed" for number in range(1, 7)):
+        recorded[gate["id"]] = gate
+    if any(recorded.get(f"T{number:02d}", {}).get("status") != "passed" for number in range(1, 7)):
         raise ValueError("required toolchain gates have not passed")
+    for number in range(1, 7):
+        gate = recorded[f"T{number:02d}"]
+        evidence = gate.get("evidence")
+        if not isinstance(evidence, list) or not evidence:
+            raise ValueError(f'gate {gate["id"]} lacks evidence files')
+        for name in evidence:
+            if not isinstance(name, str) or not name.startswith("validation/") or any(
+                part in ("", ".", "..") for part in name.split("/")
+            ) or not (directory / name).is_file() or (directory / name).stat().st_size == 0:
+                raise ValueError(f'gate {gate["id"]} has invalid evidence path')
 
 
 def payload_bytes(directory, toolchain_id):

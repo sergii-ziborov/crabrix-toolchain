@@ -36,13 +36,20 @@ class ToolchainDescriptorTests(unittest.TestCase):
             target = self.dist / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(value)
+        for number in range(1, 7):
+            evidence = self.dist / f"validation/T{number:02d}.txt"
+            evidence.parent.mkdir(parents=True, exist_ok=True)
+            evidence.write_text("test fixture only\n")
         (self.dist / "compatibility-results.json").write_text(json.dumps({
             "schemaVersion": 1,
             "rustcSHA256": hashlib.sha256((self.dist / "rustc.wasm").read_bytes()).hexdigest(),
             "sysrootSHA256": hashlib.sha256((self.dist / "sysroot-wasip1.zip").read_bytes()).hexdigest(),
             "appRevision": "c" * 40,
             "runtimeRevision": "d" * 40,
-            "gates": [{"id": f"T{number:02d}", "status": "passed"} for number in range(1, 7)],
+            "gates": [{
+                "id": f"T{number:02d}", "status": "passed",
+                "evidence": [f"validation/T{number:02d}.txt"],
+            } for number in range(1, 7)],
         }))
         self.key = Ed25519PrivateKey.from_private_bytes(bytes(range(1, 33)))
         public = self.key.public_key().public_bytes(
