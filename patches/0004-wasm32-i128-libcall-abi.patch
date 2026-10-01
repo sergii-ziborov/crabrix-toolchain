@@ -1,0 +1,22 @@
+diff --git a/compiler/rustc_codegen_cranelift/src/abi/mod.rs b/compiler/rustc_codegen_cranelift/src/abi/mod.rs
+index d5510b28..c36d4e74 100644
+--- a/compiler/rustc_codegen_cranelift/src/abi/mod.rs
++++ b/compiler/rustc_codegen_cranelift/src/abi/mod.rs
+@@ -198,8 +198,15 @@ pub(crate) fn lib_call(
+             let ret = self.lib_call_unadjusted(name, params, returns, &args)[0];
+ 
+             Cow::Owned(vec![codegen_bitcast(self, types::I128, ret)])
+-        } else if ret_single_i128 && self.tcx.sess.target.arch == Arch::S390x {
+-            // Return i128 using a return area pointer on s390x.
++        } else if ret_single_i128
++            && (self.tcx.sess.target.arch == Arch::S390x
++                || (self.tcx.sess.target.arch == Arch::Wasm32
++                    && matches!(name, "__fixsfti" | "__fixdfti" | "__fixunssfti" | "__fixunsdfti")))
++        {
++            // s390x uses a return area; LLVM-built compiler_builtins uses the
++            // wasm32 C ABI for these float-to-i128 helpers: the first i32
++            // argument is a return area.
++            // Keep the pair-valued ABI of synthesized i128 helpers unchanged.
+             let mut params = params;
+             let mut args = args.to_vec();
+ 

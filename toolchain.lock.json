@@ -4,7 +4,8 @@
     "patches": [
       "patches/0001-integer-lowering.patch",
       "patches/0002-mulhi.patch",
-      "patches/0003-icmp-imm-i128.patch"
+      "patches/0003-icmp-imm-i128.patch",
+      "patches/0004-wasm32-i128-libcall-abi.patch"
     ],
     "revision": "abc48c0b8aba37d3f3862a9d5c76eb4e78f90e88"
   },
@@ -77,6 +78,10 @@
     {
       "path": "patches/0003-icmp-imm-i128.patch",
       "sha256": "091117dc3a1355d5f6c05cff34d9b4ceccaa6fb23e1dc26847012d3cdf4e694a"
+    },
+    {
+      "path": "patches/0004-wasm32-i128-libcall-abi.patch",
+      "sha256": "a3cf72f17ca06cb58e683b3c54db632057017100e9079f4c4f4f71e8094e5eff"
     }
   ],
   "rust": {

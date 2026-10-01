@@ -18,7 +18,13 @@ Core Wasm has no widening i64 multiply. This patch exposes the already used carr
 
 Source: `compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs` in the same pinned Rust fork. The exact patch bytes and SHA-256 are recorded in the lock. The patch applicator validates the cumulative final source blob because patches 0001 and 0003 touch this file.
 
-A multi-file route planner using `petgraph 0.8.3` reached codegen and failed at `icmp_imm.i128 slt ... 0` while compiling `core::num::overflowing_add`. CLIF's 64-bit immediate is sign-extended to an i128 operand. This patch constructs the low and high Wasm i64 halves, then uses the existing pairwise `i128_lower::icmp` logic. A direct signed-comparison/overflow regression and the route planner are required gates for the next candidate; neither had passed when this patch was written.
+A multi-file route planner using `petgraph 0.8.3` reached codegen and failed at `icmp_imm.i128 slt ... 0` while compiling `core::num::overflowing_add`. CLIF's 64-bit immediate is sign-extended to an i128 operand. This patch constructs the low and high Wasm i64 halves, then uses the existing pairwise `i128_lower::icmp` logic. Candidate `cbf85af252b4abcaadd1a1d740746838c733761cf11a4ce20085287a1fae9e7c` passed the direct regression on iOS 18.2 Release Simulator (one executed, zero failures, 3.480 seconds). The route planner compiled its dependencies but failed at link time after 474.615 seconds on a different ABI issue recorded below.
+
+## 0004: wasm32 C ABI for float-to-i128 compiler builtins
+
+Source: `compiler/rustc_codegen_cranelift/src/abi/mod.rs` in the same pinned Rust fork. The exact patch bytes and SHA-256 are recorded in the lock.
+
+The graph application imports `__fixunssfti` from a Cranelift object as `(f32) -> (i64, i64)`, while the LLVM-built `compiler_builtins` sysroot defines `(i32 return_area, f32) -> ()`. The linker correctly rejected this mismatch. For the four f32/f64-to-i128 conversion helpers only, the patch uses the existing return-area libcall path. Synthesized pair-valued i128 arithmetic helpers keep their existing ABI. A direct four-conversion regression and the route planner must pass before this patch can be claimed functional; no new compiler artifact has yet been built from it.
 
 If any change is merged upstream, remove its patch in a separately tested source revision update. The completed app gates above establish the tested `clap` and `regex` versions only. They do not establish `serde_json`, whose current `serde_core` needs build-script generated output.
 
