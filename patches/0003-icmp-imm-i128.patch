@@ -1,0 +1,27 @@
+diff --git a/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs b/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs
+--- a/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs
++++ b/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs
+@@ -831,6 +831,23 @@
+         }
+         InstructionData::IntCompareImm { opcode: Opcode::IcmpImm, arg, cond, imm } => {
+             let aty = cx.vty(arg);
++            if aty == types::I128 {
++                // Imm64 is sign-extended to the operand width by CLIF. Keep
++                // that sign in the high half rather than narrowing i128 to a
++                // single Wasm value before comparison.
++                let bits = imm.bits();
++                let lo = body.add_op(
++                    wb, Operator::I64Const { value: bits as u64 }, &[], &[Type::I64],
++                );
++                let hi = body.add_op(
++                    wb,
++                    Operator::I64Const { value: if bits < 0 { u64::MAX } else { 0 } },
++                    &[], &[Type::I64],
++                );
++                let result = i128_lower::icmp(body, wb, cond, cx.pair(arg)?, (lo, hi))?;
++                cx.bind1(dfg.first_result(inst), result);
++                return Ok(());
++            }
+             let wty = map_type(aty)?;
+             let signed_cc = matches!(
+                 cond,

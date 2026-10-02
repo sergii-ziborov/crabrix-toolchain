@@ -1,0 +1,76 @@
+diff --git a/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs b/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs
+index f0cb3c9a..d28fb71b 100644
+--- a/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs
++++ b/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs
+@@ -198,6 +198,20 @@ pub fn lower_inst(
+             let a = cx.one(args[0])?;
+             let b = cx.one(args[1])?;
+ 
++            // CLIF checked i64 multiplication uses the upper product half to
++            // detect overflow. Core Wasm only exposes the lower i64 multiply.
++            if rty == types::I64 {
++                let upper = match opcode {
++                    Opcode::Umulhi => Some(i128_lower::umulhi64(body, wb, a, b)),
++                    Opcode::Smulhi => Some(i128_lower::smulhi64(body, wb, a, b)),
++                    _ => None,
++                };
++                if let Some(value) = upper {
++                    cx.bind1(result, value);
++                    return Ok(());
++                }
++            }
++
+             // Shifts: wasm requires amount type == operand type; CLIF allows a
+             // mismatch. Both agree the amount is taken mod bit-width, so a plain
+             // wrap/extend preserves semantics. (Rotates share the fixup.)
+@@ -886,6 +900,19 @@ fn lower_unary(
+             let dst_ty = dfg.value_type(result);
+             let signed = opcode == Opcode::Sextend;
+             let v = cx.one(arg)?;
++            // Both narrow CLIF types use a canonical zero-extended wasm i32.
++            // An i8 -> i16 extension therefore stays in i32; signed extension
++            // must be masked back to the destination's 16-bit width.
++            if src_ty == types::I8 && dst_ty == types::I16 {
++                let widened = if signed {
++                    let signed_byte = sign_extend_narrow(body, wb, v, types::I8);
++                    mask_narrow(body, wb, signed_byte, types::I16)
++                } else {
++                    v
++                };
++                cx.bind1(result, widened);
++                return Ok(());
++            }
+             // Normalize narrow sources within I32 first: canonical form is already
+             // zero-extended, so uextend is a no-op; sextend re-signs in place.
+             let (v, src_ty) = match src_ty {
+@@ -983,11 +1010,12 @@ fn lower_unary(
+                 // Narrow destinations MUST re-canonicalize (mask): the source's high
+                 // bits are live data, not representation slack. (The battery's
+                 // cast_chain miscompile is what happens otherwise.)
+-                (types::I64, types::I8 | types::I16) => {
++                (types::I128 | types::I64, types::I8 | types::I16) => {
+                     let w = body.add_op(wb, Operator::I32WrapI64, &[low64], &[Type::I32]);
+                     mask_narrow(body, wb, w, dst_ty)
+                 }
+                 (types::I32, types::I8 | types::I16) => mask_narrow(body, wb, low64, dst_ty),
++                (types::I16, types::I8) => mask_narrow(body, wb, low64, dst_ty),
+                 (s, d) => bail!("ireduce {s} -> {d} unimplemented"),
+             };
+             cx.bind1(result, wv);
+@@ -1111,6 +1139,16 @@ fn lower_unary(
+         Opcode::Bswap => {
+             let result = dfg.first_result(inst);
+             let rty = dfg.value_type(result);
++            if rty == types::I128 {
++                // A full 128-bit byte swap reverses the order of the 64-bit
++                // halves and byte-swaps each half. A CLIF i128 is represented
++                // by two wasm i64 values, never by a single wasm value.
++                let (lo, hi) = cx.pair(arg)?;
++                let swapped_lo = bswap64(body, wb, hi);
++                let swapped_hi = bswap64(body, wb, lo);
++                cx.bind2(result, swapped_lo, swapped_hi);
++                return Ok(());
++            }
+             let v_in = cx.one(arg)?;
+             let wv = match rty {
+                 types::I16 => {

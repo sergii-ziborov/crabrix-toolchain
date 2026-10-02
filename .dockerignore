@@ -1,0 +1,5 @@
+.git
+work
+dist
+*.part
+__pycache__

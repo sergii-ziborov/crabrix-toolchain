@@ -1,0 +1,3 @@
+# A patch file contains literal diff markers followed by blank context lines.
+# Those spaces are part of the exact upstream patch bytes verified by the lock.
+patches/*.patch whitespace=-blank-at-eol
