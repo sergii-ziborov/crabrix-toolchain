@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "status": "candidate-not-for-release",
+  "date": "2026-10-02",
+  "builderCommit": "f0bd6bc130fe0190275d34363e3243d356801aeb",
+  "compilerSHA256": "d243f2ac041ce7892da9ee7e03a361d63259645d796e67c25ce08938ecd62591",
+  "sysrootArchiveSHA256": "df1c69c31ce5730ff945d6aff5193a037b0ef3bad9495bbc24875dcf57b4cab3",
+  "runtimeRevision": "d996f0d11dff54734b5670d58062e22c6e01f949",
+  "environment": {
+    "configuration": "Release",
+    "platform": "iOS Simulator",
+    "runtime": "iOS 18.2",
+    "xcode": "27.0 beta (27A5228h)"
+  },
+  "gates": [
+    {
+      "id": "float-to-i128-wasm-abi",
+      "test": "BundledCompilerGateTests/testSourceBuiltCompilerFloatToI128BuiltinsUseWasmABI()",
+      "executed": 1,
+      "passed": 1,
+      "failed": 0,
+      "durationSeconds": 5.289
+    },
+    {
+      "id": "multifile-route-planner-graph-crates",
+      "test": "BundledCompilerGateTests/testMultiFileRoutePlannerWithGraphCratesBuildsAndRuns()",
+      "executed": 1,
+      "passed": 1,
+      "failed": 0,
+      "durationSeconds": 785.464
+    },
+    {
+      "id": "all-46-academy-examples",
+      "test": "BundledCompilerGateTests/testEveryInstalledAcademyExampleBuildsAndRuns()",
+      "executed": 1,
+      "passed": 1,
+      "failed": 0,
+      "durationSeconds": 139.442
+    }
+  ],
+  "limits": [
+    "These are Simulator compatibility gates, not a physical-device run.",
+    "The source-built compiler is staged as a candidate and is not in the app's 1.1 (10) archive.",
+    "The controlled build-environment lock, clean release build, two-build comparison, signing, and complete release gates are pending."
+  ]
+}
