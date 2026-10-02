@@ -55,8 +55,22 @@
     }
   },
   "buildEnvironment": {
-    "hostToolVersions": null,
-    "imageDigest": null
+    "hostToolVersions": {
+      "ubuntu": "24.04.5 LTS",
+      "binutils": "2.42-4ubuntu2.10",
+      "build-essential": "12.10ubuntu1",
+      "cmake": "3.28.3-1build7",
+      "curl": "8.5.0-2ubuntu10.15",
+      "gcc": "13.3.0-6ubuntu2~24.04.1",
+      "git": "2.43.0",
+      "libc6": "2.39-0ubuntu8.9",
+      "ninja": "1.11.1",
+      "python3": "3.12.3"
+    },
+    "imageDigest": "b82320d0f0c28f7ae2b0cacfad950582da63bee178715e5d8fa93aa5efac48b1",
+    "imageArchiveURL": "https://github.com/sergii-ziborov/crabrix-toolchain/releases/download/build-env-2026-10-02/crabrix-builder-linux-amd64-2026-10-02.tar.zst",
+    "imageArchiveSHA256": "5e8ab035a625e863e95eb45b39490f586cb0380e5e9b3653e8b98a238e0e70ed",
+    "platform": "linux/amd64"
   },
   "builder": {
     "revision": "d7c1a08a60816ed824bb04f75fe79fa797996deb",

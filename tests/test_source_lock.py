@@ -39,10 +39,17 @@ class SourceLockTests(unittest.TestCase):
         errors = VALIDATOR.validate(broken, source_only=True)
         self.assertTrue(any("craneliftGlobalAssembler" in error for error in errors))
 
-    def test_release_lock_remains_closed_without_builder_identity(self):
-        errors = VALIDATOR.validate(self.lock)
-        self.assertTrue(any("imageDigest" in error for error in errors))
-        self.assertTrue(any("hostToolVersions" in error for error in errors))
+    def test_release_environment_is_fully_locked(self):
+        self.assertEqual(VALIDATOR.validate(self.lock), [])
+        for field in ("imageDigest", "imageArchiveSHA256", "imageArchiveURL", "platform", "hostToolVersions"):
+            broken = copy.deepcopy(self.lock)
+            broken["buildEnvironment"][field] = None
+            errors = VALIDATOR.validate(broken)
+            self.assertTrue(any(f"buildEnvironment.{field}" in error for error in errors), field)
+
+        broken = copy.deepcopy(self.lock)
+        broken["buildEnvironment"]["platform"] = "linux/arm64"
+        self.assertTrue(any("buildEnvironment.platform" in error for error in VALIDATOR.validate(broken)))
 
 
 if __name__ == "__main__":

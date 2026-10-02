@@ -35,6 +35,9 @@ class BuildModeTests(unittest.TestCase):
             lock = json.loads((ROOT / "toolchain.lock.json").read_text())
             lock["buildEnvironment"] = {
                 "imageDigest": "0" * 64,
+                "imageArchiveSHA256": "0" * 64,
+                "imageArchiveURL": "https://github.com/sergii-ziborov/crabrix-toolchain/releases/download/test/builder.tar.zst",
+                "platform": "linux/amd64",
                 "hostToolVersions": {"test-host": "1"},
             }
             (root / "toolchain.lock.json").write_text(json.dumps(lock))

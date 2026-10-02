@@ -113,6 +113,14 @@ def validate(lock, source_only=False):
         return errors
     environment = lock.get("buildEnvironment", {})
     require_digest(environment.get("imageDigest"), "buildEnvironment.imageDigest", errors)
+    require_digest(environment.get("imageArchiveSHA256"), "buildEnvironment.imageArchiveSHA256", errors)
+    archive_url = environment.get("imageArchiveURL")
+    if not isinstance(archive_url, str) or not archive_url.startswith(
+        "https://github.com/sergii-ziborov/crabrix-toolchain/releases/download/"
+    ):
+        errors.append("buildEnvironment.imageArchiveURL: expected a public Crabrix release asset")
+    if environment.get("platform") != "linux/amd64":
+        errors.append("buildEnvironment.platform: expected linux/amd64")
     versions = environment.get("hostToolVersions")
     if not isinstance(versions, dict) or not versions or any(
         not isinstance(name, str) or not isinstance(version, str) or not version
