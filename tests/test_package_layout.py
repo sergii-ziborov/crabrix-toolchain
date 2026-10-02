@@ -21,6 +21,22 @@ VERIFY_SPEC.loader.exec_module(VERIFIER)
 
 
 class PackageLayoutTests(unittest.TestCase):
+    def test_notice_archive_is_deterministic_and_contains_source_text(self):
+        with tempfile.TemporaryDirectory(prefix="crabrix-notices-layout-") as temporary:
+            root = Path(temporary)
+            source = root / "licenses"
+            source.mkdir()
+            (source / "README.md").write_text("Notice index\n")
+            (source / "third-party").mkdir()
+            (source / "third-party" / "LICENSE.txt").write_text("License body\n")
+            first, second = root / "first.zip", root / "second.zip"
+            names = PACKAGER.write_notices_archive(source, first)
+            self.assertEqual(names, PACKAGER.write_notices_archive(source, second))
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            with zipfile.ZipFile(first) as archive:
+                self.assertEqual(archive.namelist(), names)
+                self.assertEqual(archive.read("licenses/third-party/LICENSE.txt"), b"License body\n")
+
     def test_sysroot_archive_is_deterministic_and_app_readable(self):
         with tempfile.TemporaryDirectory(prefix="crabrix-sysroot-layout-") as temporary:
             root = Path(temporary)

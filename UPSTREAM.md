@@ -5,6 +5,7 @@
 - License: MIT, preserved in [`LICENSE`](LICENSE)
 - Former release for functional comparison: `artifacts-test-7`, 22 July 2026
 - Rust source fork selected for the first own build: <https://github.com/AngelOnFira/rust> at `abc48c0b8aba37d3f3862a9d5c76eb4e78f90e88`
+- WASI SDK 32.0 source association: <https://github.com/WebAssembly/wasi-sdk> tag `wasi-sdk-32`, peeled commit `249054e5427023344c1906afde0e9073714d1930`; pinned `src/wasi-libc` commit `2fc32bc81b9f07f8d9525edea59bfbaf760c06d6`. The downloaded SDK archive is verified separately by SHA-256 in the lock.
 
 The old `build-local.sh` followed `bjorn3/rust`'s moving branch and fell back to wild-linker's default branch when its revision could not be parsed. The July workflow used `AngelOnFira/rust` instead. Neither floating recipe is used for a Crabrix release. The old script and workflow remain accessible in Git history.
 

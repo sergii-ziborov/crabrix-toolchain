@@ -60,6 +60,17 @@ def validate(lock, source_only=False):
     if not sdk.get("url", "").startswith("https://"):
         errors.append("wasiSDK.url: expected HTTPS")
     require_digest(sdk.get("sha256"), "wasiSDK.sha256", errors)
+    if sdk.get("sourceURL") != "https://github.com/WebAssembly/wasi-sdk.git":
+        errors.append("wasiSDK.sourceURL: expected upstream Git source")
+    require_sha(sdk.get("sourceRevision"), "wasiSDK.sourceRevision", errors)
+    sdk_submodules = sdk.get("sourceSubmodules")
+    if not isinstance(sdk_submodules, dict) or set(sdk_submodules) != {
+        "src/config", "src/llvm-project", "src/wasi-libc"
+    }:
+        errors.append("wasiSDK.sourceSubmodules: expected config, LLVM and wasi-libc")
+    else:
+        for path, sha in sdk_submodules.items():
+            require_sha(sha, f"wasiSDK.sourceSubmodules[{path}]", errors)
     bootstrap = lock.get("bootstrap", {})
     require_digest(bootstrap.get("configSourceSHA256"), "bootstrap.configSourceSHA256", errors)
     if bootstrap.get("buildJobs") != 3:

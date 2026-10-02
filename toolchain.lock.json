@@ -123,6 +123,13 @@
   "wasiSDK": {
     "hostTriple": "x86_64-linux",
     "sha256": "55fc523ebfbc98f69d1034fcfcb83d1ff5610cd9ab7eceef6cd097a30ba4ef93",
+    "sourceRevision": "249054e5427023344c1906afde0e9073714d1930",
+    "sourceSubmodules": {
+      "src/config": "f992bcc08219edb283d2ab31dd3871a4a0e8220e",
+      "src/llvm-project": "4434dabb69916856b824f68a64b029c67175e532",
+      "src/wasi-libc": "2fc32bc81b9f07f8d9525edea59bfbaf760c06d6"
+    },
+    "sourceURL": "https://github.com/WebAssembly/wasi-sdk.git",
     "url": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-32/wasi-sdk-32.0-x86_64-linux.tar.gz",
     "version": "32.0"
   },

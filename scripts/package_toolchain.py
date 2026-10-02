@@ -55,6 +55,22 @@ def write_sysroot_archive(files, destination):
     return inventory
 
 
+def write_notices_archive(source, destination):
+    notices = sorted(path for path in source.rglob("*") if path.is_file())
+    if not notices or any(path.is_symlink() for path in notices):
+        raise SystemExit("license notices are missing or contain a symlink")
+    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED,
+                         compresslevel=9, strict_timestamps=True) as archive:
+        for path in notices:
+            name = "licenses/" + path.relative_to(source).as_posix()
+            info = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o100644 << 16
+            archive.writestr(info, path.read_bytes(), compress_type=zipfile.ZIP_DEFLATED,
+                             compresslevel=9)
+    return ["licenses/" + path.relative_to(source).as_posix() for path in notices]
+
+
 def main():
     if STRIP_EXPERIMENT and not CANDIDATE:
         raise SystemExit("debug-section stripping is candidate-only until app gates pass")
@@ -116,6 +132,7 @@ def main():
     # BundledSysroot.prepare compares this file byte-for-byte with the digest.
     # Keep the app's existing 64-byte checksum convention: no trailing newline.
     (OUT / "sysroot-wasip1.sha256").write_text(digest(OUT / "sysroot-wasip1.zip"))
+    write_notices_archive(ROOT / "licenses", OUT / "licenses.zip")
     lock = json.loads((ROOT / "toolchain.lock.json").read_text())
     builder_commit = subprocess.check_output(
         ["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True

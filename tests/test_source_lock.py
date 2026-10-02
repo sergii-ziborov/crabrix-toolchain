@@ -39,6 +39,11 @@ class SourceLockTests(unittest.TestCase):
         errors = VALIDATOR.validate(broken, source_only=True)
         self.assertTrue(any("craneliftGlobalAssembler" in error for error in errors))
 
+        broken = copy.deepcopy(self.lock)
+        broken["wasiSDK"]["sourceSubmodules"]["src/wasi-libc"] = "main"
+        errors = VALIDATOR.validate(broken, source_only=True)
+        self.assertTrue(any("wasiSDK.sourceSubmodules[src/wasi-libc]" in error for error in errors))
+
     def test_release_environment_is_fully_locked(self):
         self.assertEqual(VALIDATOR.validate(self.lock), [])
         for field in ("imageDigest", "imageArchiveSHA256", "imageArchiveURL", "platform", "hostToolVersions"):
