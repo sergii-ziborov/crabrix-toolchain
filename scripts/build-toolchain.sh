@@ -70,7 +70,7 @@ mkdir -p "$work/logs"
     2>&1 | tee "$work/logs/wasip1-sysroot-build.log"
 )
 if [[ "$mode" == --candidate ]]; then
-  echo "Candidate build finished. Packaging and publication still require the complete release environment lock."
+  echo "Candidate build finished. Its output remains test-only; use a fresh --locked build for release."
 else
   echo "Build finished; package-toolchain.sh validates the produced files before publication."
 fi

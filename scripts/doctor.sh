@@ -46,5 +46,5 @@ if [[ "$mode" == --locked ]]; then
   }
   python3 "$root/scripts/validate-lock.py"
 else
-  echo "Candidate build inputs are source-pinned; release environment lock is incomplete." >&2
+  echo "Candidate mode marks output as test-only; use --locked for a release build." >&2
 fi

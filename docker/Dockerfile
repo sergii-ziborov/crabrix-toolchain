@@ -1,6 +1,6 @@
 # The amd64 Ubuntu 24.04 manifest is pinned independently of the mutable tag.
-# This prepares a local candidate build environment. A release lock still needs
-# the digest of the completed image and a successful source build.
+# The release lock pins the digest of the completed image built from this
+# recipe. Rebuilding against live apt repositories may produce a new image.
 FROM ubuntu@sha256:496754492fb28b4d3049432f2ca787449331e23fb14f0dd3fffea86bf5a93eb4
 
 ENV DEBIAN_FRONTEND=noninteractive \

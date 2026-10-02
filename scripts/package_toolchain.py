@@ -138,7 +138,7 @@ def main():
     (OUT / "toolchain-provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
     if CANDIDATE:
         (OUT / "CANDIDATE-NOT-FOR-RELEASE.txt").write_text(
-            "Trial output from incomplete release-environment lock. Do not publish or bundle in a release.\n"
+            "Trial output from candidate mode. Do not publish or bundle in a release.\n"
         )
     sums = [f"{digest(p)}  {p.name}" for p in sorted(OUT.iterdir()) if p.is_file()]
     (OUT / "SHA256SUMS").write_text("\n".join(sums) + "\n")
