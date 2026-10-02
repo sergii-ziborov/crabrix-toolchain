@@ -12,4 +12,4 @@ jobs:
       - run: python3 scripts/validate-lock.py --source-only
       - run: python3 -m unittest discover -s tests
       - run: bash -n scripts/*.sh
-      - run: python3 -m py_compile scripts/validate-lock.py scripts/package_toolchain.py
+      - run: python3 -m py_compile scripts/*.py

@@ -11,4 +11,17 @@ The builder recipe is MIT licensed; see the root [`LICENSE`](../LICENSE). The no
 | `WASI-SDK-*` | `WebAssembly/wasi-sdk` `249054e5427023344c1906afde0e9073714d1930`, root `LICENSE` |
 | `WASI-LIBC-*` | that SDK's `src/wasi-libc` submodule `2fc32bc81b9f07f8d9525edea59bfbaf760c06d6`, root license files |
 
-The exact third-party dependency set in a produced compiler still needs an artifact-level notice audit before publication. These primary notices are a starting inventory, not a claim that every vendored dependency is covered.
+The `toolchain-2026-10-02.1` release also includes `vendor-notices.zip`, a
+deterministic inventory of all 1592 vendored Rust packages used by the locked
+build. It contains 2628 notice files plus an index with each package name,
+version, declared license expression, source of the notice and file digest.
+For 142 packages that publish no separate license file in their crate archive,
+the index identifies pinned standard SPDX texts for their declared expression.
+Three additional notices from the pinned WASI libc source are included.
+The exact standard-text and source-notice inputs are in
+[`release-notices/`](../release-notices/README.md). The public verifier checks
+the archive against the source lock, its index and all member digests.
+
+This inventory preserves source notices; it does not relicense any dependency
+under this builder's MIT license. Additional third-party terms remain attached
+to their components and source repositories.
