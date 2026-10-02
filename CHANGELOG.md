@@ -1,6 +1,24 @@
 # Changelog
 
-## Unreleased
+## toolchain-2026-10-02.1
+
+- Produced `rustc.wasm` and the `wasm32-wasip1` sysroot from the exact locked
+  Rust source and Linux amd64 build image, with prebuilt stage0 and WASI SDK
+  inputs disclosed in the lock.
+- Passed 13 selected Release iOS 18.2 Simulator compiler, Cargo, Academy and
+  sandbox gates with the exact first release artifacts. A separate
+  `serde_json`/`serde_core` build-script probe failed and remains outside the
+  supported Cargo subset.
+- Completed a second clean compiled-output build with the same inputs.
+  Compiler and sysroot raw digests differed because build-root paths enter
+  data and metadata. The release includes exact hashes and a difference
+  report; bit-identical reproducibility is not claimed.
+- Added a protected Ed25519 descriptor publication step, a public verifier,
+  source lock and compatibility checks, and a deterministic archive of notices
+  for all 1592 vendored Rust packages. The release keeps the original Wasm
+  custom sections.
+
+## Development history before first release
 
 - Forked the MIT builder at `d7c1a08a60816ed824bb04f75fe79fa797996deb`.
 - Pinned the selected Rust source and all Git submodule revisions.
@@ -14,4 +32,3 @@
 - Added a pinned-base Linux x86_64 Docker candidate and an 8 GiB build preflight.
 - Verified the Rust source, WASI SDK, bootstrap archives and offline Cargo vendor tree; the extra rustfmt bootstrap archives are now locked.
 - Recorded the input-preparation evidence in `docs/BUILD-STATUS-2026-09-30.md`.
-- No source-built Crabrix toolchain release has been produced yet.

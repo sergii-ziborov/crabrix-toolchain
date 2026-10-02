@@ -1,68 +1,124 @@
 # Crabrix toolchain
 
-Crabrix builds the Rust compiler and `wasm32-wasip1` standard library used by the native Crabrix app from pinned Rust sources. This repository carries the build recipe, source lock, packaging tools, and release verification gates. It is a fork of [AngelOnFira/wasm-rustc](https://github.com/AngelOnFira/wasm-rustc), with upstream history and MIT terms preserved.
+The source-built Rust compiler and `wasm32-wasip1` sysroot bundled with
+[Crabrix](https://github.com/sergii-ziborov/Crabrix). This repository maintains
+the pinned build recipe, source patches, artifact inventories and release
+verification tools. It is a fork of
+[AngelOnFira/wasm-rustc](https://github.com/AngelOnFira/wasm-rustc) with its
+history and MIT terms preserved. Rust, LLVM, WASI SDK and vendored crates keep
+their own licenses.
 
-The compiler is a Rust fork with Cranelift and in-process `riwl` linking. It runs as a WebAssembly module inside the reviewed app; course downloads cannot update or replace it. The Rust compiler itself is upstream-derived software, not a new Crabrix compiler implementation.
+The current compiler derives from Rust source commit
+`abc48c0b8aba37d3f3862a9d5c76eb4e78f90e88` (`1.96.0-dev`). It uses
+Cranelift and the in-process `riwl` linker. The selected source revision's
+connection to the older `artifacts-test-7` binary is inferred from the builder
+history; these new artifacts are produced by this pipeline and have their own
+digests. The build compiles LLVM from the pinned Rust submodule and uses a
+verified prebuilt stage0 compiler and WASI SDK. It does not claim a bootstrap
+from bare metal.
 
-## Build inputs
+## Current release
 
-[`toolchain.lock.json`](toolchain.lock.json) pins the builder and Rust source commits, 12 Rust Git submodules, WASI SDK 32 archive and source/submodule revisions, bootstrap Rust and rustfmt archives, the completed Docker image, target, and packaging version. Archive digests are also checked against the selected Rust source's `src/stage0`. The selected Rust revision is `abc48c0b8aba37d3f3862a9d5c76eb4e78f90e88`, which declares version `1.96.0-dev`. Its association with the old `artifacts-test-7` binary is an inference from the July 2026 workflow chronology, not proven binary provenance.
+[toolchain-2026-10-02.1](https://github.com/sergii-ziborov/crabrix-toolchain/releases/tag/toolchain-2026-10-02.1)
+contains `rustc.wasm`, the `wasm32-wasip1` sysroot ZIP and per-file inventory,
+primary and vendored notices, source lock, provenance, compatibility results,
+two-build comparison, SHA-256 sums and an Ed25519 signed descriptor. The app
+pins this exact release and verifies the signature and asset hashes on its
+build Mac before bundling; a CoursePack cannot replace the compiler on a phone.
 
-The recipe's CI LLVM archive for that source revision is no longer available. This build compiles LLVM from the pinned Rust submodule and enables both LLVM and Cranelift backends. The stage0 bootstrap compiler remains a verified prebuilt input. The exact backend selection and completed Linux x86_64 builder image are recorded in the lock. The resulting compiler must pass the app's Check/Run/Cargo gates before a toolchain release. There is currently **no Crabrix-produced release artifact**.
+The release compiler passed 13 selected Release iOS 18.2 Simulator gates using
+CrabrixRuntime at `d996f0d11dff54734b5670d58062e22c6e01f949`: Check,
+Run, E0502, root features, offline pin, Vendor, all 46 Academy Examples,
+multi-file projects using `clap`, `regex`, `hashbrown`, `smallvec`, `petgraph`
+and `itertools`, Stop, bounded output and warning-cache parity. See the
+[compatibility report](https://github.com/sergii-ziborov/crabrix-toolchain/releases/download/toolchain-2026-10-02.1/compatibility-results.json)
+for exact tests, source and artifact identities. A separate `serde_json`
+probe failed because its `serde_core` dependency needs build-script-generated
+`OUT_DIR` content. Crabrix's supported Cargo subset does not execute build
+scripts; success on the named crates is not a claim about arbitrary crates.
 
-The pinned [backend patches](PATCHES.md) cover narrow integer conversions observed in `aho-corasick`, `regex-automata`, and `itoa`, high-half i64 multiplication exposed by `clap_builder`, i128 byte swap exposed by `regex-automata`, sign-extended i128 comparisons, and the float-to-i128 libcall ABI. GNU `as` is selected for Cranelift inline assembly. The first source-built candidate passed app E0502 and all 46 Academy Examples on an iOS 18.2 Release Simulator, then failed the four-crate CLI at high-half multiplication. The second passed checked multiplication and a real `smallvec` crate, then failed the same CLI at i128 byte swap. The third, `e7c94685d0f6cc217d57f9d1ae1d2b005ddd718f03f6ff30bfa1596730aae775`, passed standalone `regex`, the three-file `clap`/`regex`/`hashbrown`/`smallvec` CLI, all 46 Academy Examples, and eight further compiler/Cargo/sandbox gates on the Release Simulator. The fifth candidate, `d243f2ac041ce7892da9ee7e03a361d63259645d796e67c25ce08938ecd62591`, passed its float-to-i128 regression, a multi-file route planner using `petgraph` and `itertools`, and all 46 Academy Examples in separate Release Simulator runs. [The candidate report](docs/candidate-v5-compatibility.json) records the exact gates. These results prove those workloads, not arbitrary crate support. Current `serde_core` still needs generated build-script output that the app's Cargo subset does not provide.
+The [two-build report](https://github.com/sergii-ziborov/crabrix-toolchain/releases/download/toolchain-2026-10-02.1/reproducibility-results.json)
+records raw compiler and sysroot digests from separate clean build-output
+directories in the same pinned Linux amd64 image. Read its status before
+claiming byte-for-byte reproducibility. The current release keeps Wasm name
+and debug sections; a smaller stripped candidate remains an experiment.
 
-## Commands
+## Build inputs and commands
 
-Source pin verification (works on macOS or Linux):
+[`toolchain.lock.json`](toolchain.lock.json) pins the builder and Rust commits,
+submodules, backend patches, WASI SDK, bootstrap archives, Docker image,
+target and packaging format. Missing revisions or digests stop the build. The
+completed [Linux amd64 build image](https://github.com/sergii-ziborov/crabrix-toolchain/releases/tag/build-env-2026-10-02)
+is pinned by ID and archive SHA-256 in the lock. The source/build pipeline
+requires Linux amd64, at least 8 GiB RAM and 30 GiB free disk. On Apple
+Silicon, the pinned image runs through Docker's amd64 emulation. Xcode app
+archives are a separate macOS step.
+
+Run the following inside that pinned image, with a writable repository and
+a fresh `work/` directory (or set `CRABRIX_TOOLCHAIN_WORK` to another fresh
+directory). Fetch and vendoring
+are the explicit network phases; `build-toolchain.sh` then uses Cargo offline.
 
 ```sh
-python3 scripts/validate-lock.py --source-only
-```
-
-Production build sequence on a controlled Linux x86_64 host with enough RAM and disk:
-
-```sh
-./scripts/doctor.sh
+./scripts/doctor.sh --locked
 ./scripts/fetch-sources.sh --locked
 ./scripts/vendor-deps.sh --locked
-./scripts/apply-patches.sh --locked
 ./scripts/build-toolchain.sh --locked
 ./scripts/package-toolchain.sh --deterministic
 ./scripts/verify-artifacts.sh
+```
+
+To inventory vendored notices from those exact fetched sources:
+
+```sh
+python3 scripts/collect-vendor-notices.py \
+  --vendor "${CRABRIX_TOOLCHAIN_WORK:-work}/rust/vendor" --lock toolchain.lock.json \
+  --extra-notices release-notices/source-notices \
+  --standard-licenses release-notices/spdx-v3.29.0 \
+  --out dist/vendor-notices.zip
+python3 scripts/verify_vendor_notices.py \
+  --archive dist/vendor-notices.zip --lock toolchain.lock.json
+```
+
+The collector records every one of 1592 vendored packages, retaining original
+notice files and supplementing 142 packages that have only license metadata
+with SHA-pinned standard SPDX texts. The index distinguishes these sources.
+See [release-notices](release-notices/README.md) and [primary notices](licenses/README.md).
+
+The app's Release Simulator compatibility report is generated from actual
+`.xcresult` bundles by `scripts/generate-compatibility.py`, not by a written
+test alone. A second clean build is compared with
+`scripts/compare-build-outputs.py`; the raw difference report and concise
+public build summary accompany the release. Signing uses
+`scripts/sign-toolchain-release.py` in a protected publish step with an
+owner-only key outside this repository. Ordinary pull requests never receive
+that key. The verifier requires Python 3.11+ and the pinned
+[`requirements-publish.txt`](requirements-publish.txt) package. Anyone can
+verify the published files:
+
+```sh
+python3 scripts/verify-signed-release.py \
+  --dist dist --keys keys/production-keyring.json
 ./scripts/smoke-toolchain.sh
 ```
 
-`fetch-sources.sh --locked` materializes pinned Rust source, submodules, SDK and bootstrap compiler inputs. `vendor-deps.sh --locked` is the explicit network phase for Rust workspace crates; the later build requires its vendor tree and runs Cargo offline. `build-toolchain.sh --locked` requires the complete source and environment lock, a clean committed builder checkout, and a fresh work directory. Candidate work directories carry a marker and cannot be packaged for release.
+`smoke-toolchain.sh` is a release gate and requires the signed descriptor and
+all evidence files in `dist/`. CI runs fast source-lock and script tests on
+ordinary pull requests; the full Rust/LLVM build is controlled rather than
+repeated on each documentation edit.
 
-After a successful candidate build, `./scripts/stage-candidate.sh` creates test-only artifacts under ignored `work/candidate-artifacts/`, with an explicit candidate marker and provenance flag. It never writes `dist/` and cannot serve as a release package. This permits app compatibility probes before the controlled release build.
+## Integration and limits
 
-### Docker build host
+Crabrix's app repository records the toolchain ID, descriptor key, source
+lock and exact compiler/sysroot digests in one release-input manifest. The
+compiler and runtime ship in the reviewed app. Courses deliver readable
+learning content and editable Rust source. The compiler targets
+`wasm32-wasip1`; native linking, procedural macros and executable Cargo build
+scripts are outside the supported on-device subset.
 
-The completed Linux x86_64 builder image has Docker ID `sha256:b82320d0f0c28f7ae2b0cacfad950582da63bee178715e5d8fa93aa5efac48b1`. Its [public archive](https://github.com/sergii-ziborov/crabrix-toolchain/releases/tag/build-env-2026-10-02) is pinned by SHA-256 `5e8ab035a625e863e95eb45b39490f586cb0380e5e9b3653e8b98a238e0e70ed` in the lock. To use the same image on another Docker host:
-
-```sh
-curl -fL -o crabrix-builder-linux-amd64-2026-10-02.tar.zst \
-  https://github.com/sergii-ziborov/crabrix-toolchain/releases/download/build-env-2026-10-02/crabrix-builder-linux-amd64-2026-10-02.tar.zst
-printf '%s  %s\n' 5e8ab035a625e863e95eb45b39490f586cb0380e5e9b3653e8b98a238e0e70ed \
-  crabrix-builder-linux-amd64-2026-10-02.tar.zst | sha256sum -c -
-zstd -dc crabrix-builder-linux-amd64-2026-10-02.tar.zst | docker load
-docker image inspect sha256:b82320d0f0c28f7ae2b0cacfad950582da63bee178715e5d8fa93aa5efac48b1
-docker run --rm --platform linux/amd64 \
-  --mount "type=bind,src=$PWD,dst=/workspace,readonly" \
-  sha256:b82320d0f0c28f7ae2b0cacfad950582da63bee178715e5d8fa93aa5efac48b1 \
-  python3 scripts/validate-lock.py
-```
-
-The image comes from [`docker/Dockerfile`](docker/Dockerfile). The pinned base and completed image ID identify the actual environment; rebuilding the Dockerfile later with live Ubuntu packages can produce a different image. On Apple Silicon, Docker runs this x86_64 image through emulation, but its VM still needs enough RAM and disk for Rust. The [Rust compiler development guide](https://rustc-dev-guide.rust-lang.org/building/prerequisites.html) recommends at least 8 GB RAM and 30 GB free disk for a compiler build. A passing image or source-lock check does not prove a successful compiler build.
-
-`package-toolchain.sh` emits unstripped `rustc.wasm`, deterministic `sysroot-wasip1.zip` with an app-readable manifest, per-file SHA-256 inventory, ZIP checksum, deterministic `licenses.zip`, source provenance and checksums after a successful own build. `verify-artifacts.sh` checks the sysroot ZIP contents against both inventories and checks release asset digests. [Primary third-party notices](licenses/README.md) are included; an artifact-level audit of vendored dependencies remains a release gate. Signing is a separate protected release step. No source-built output is copied from the previous `artifacts-test-7` release.
-
-The separate `scripts/strip-wasm-custom.py` is a test-only size experiment. On the second candidate it removed 41,503,919 bytes of function-name and debug sections (129,337,555 → 87,833,636 bytes), while retaining `producers`, `target_features` and every executable section byte for byte. The release packager still keeps the original module until the smaller candidate passes the same compiler, diagnostics and performance gates.
-Set `CRABRIX_TOOLCHAIN_STRIP_EXPERIMENT=1` only with `./scripts/stage-candidate.sh` to produce a separately checksummed candidate from the same compiler source. Its provenance records the full compiler digest and strip policy. The release packager rejects this switch. The third candidate's smaller file is 87,833,739 bytes (SHA-256 `5da690fe77625d55602e400ebdb0d57fb496c1f3e26d1376c1a8ef0e56e378bd`). On iOS 18.2 Release Simulator it passed E0502, byte swap, all 46 Academy Examples, and the three-file `clap`/`regex`/`hashbrown`/`smallvec` CLI. Five warning-Check observations per variant measured 1.37× median parse and 1.22× first Check, with essentially unchanged changed-Check time. The fixed-order Simulator samples do not establish device or whole-app speed; the stripped file remains test-only until release gates and controlled comparisons are complete.
-
-## Compatibility and verification
-
-The intended output target is `wasm32-wasip1`. Functional release gates cover Crabrix Check and Run, E0502 diagnostics, root features, a real crate, offline compilation, and Vendor. Two independent clean builds must be compared; identical raw digests are not claimed in advance. See [REPRODUCIBILITY.md](REPRODUCIBILITY.md) and [SECURITY.md](SECURITY.md).
-
-The MIT license applies to this builder recipe. Rust, LLVM, WASI SDK and their dependencies retain their own licenses. [licenses/README.md](licenses/README.md) identifies the notice collection required for each produced release. See [UPSTREAM.md](UPSTREAM.md) for the exact fork baseline and recipe changes.
+For the full build method and honest raw-output comparison, see
+[REPRODUCIBILITY.md](REPRODUCIBILITY.md). [SECURITY.md](SECURITY.md) explains
+the source and signature boundaries, [UPSTREAM.md](UPSTREAM.md) records fork
+provenance, and [PATCHES.md](PATCHES.md) lists each local patch. The MIT
+[LICENSE](LICENSE) covers this builder recipe, not the Rust compiler or
+third-party components.
