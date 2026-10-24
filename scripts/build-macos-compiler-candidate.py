@@ -154,6 +154,8 @@ def main():
                           "role": "intermediate Darwin compiler only; not bundled into WASI candidate"}
     work.mkdir()
     (work / "CANDIDATE-NOT-FOR-RELEASE.txt").write_text("Compiler-only native macOS experiment. Not a locked release.\n")
+    # The regular Linux packager recognizes this marker as well.
+    (work / ".candidate-build").write_text("Native macOS compiler-only performance candidate.\n")
     run([sys.executable, str(root / "scripts/validate-lock.py"), "--source-only"])
     run(["git", "init", str(source)])
     run(["git", "remote", "add", "origin", lock["rust"]["url"]], cwd=source)
@@ -177,7 +179,9 @@ def main():
     if not (sdk / "bin/clang").is_file():
         raise ValueError("verified native WASI SDK has no clang")
     environment.update(WASI_SDK_PATH=str(sdk), WASI_SYSROOT=str(sdk / "share/wasi-sysroot"),
-                       CARGO_HOME=str(work / "cargo-home"))
+                       CARGO_HOME=str(work / "cargo-home"),
+                       SOURCE_DATE_EPOCH=subprocess.check_output(
+                           ["git", "show", "-s", "--format=%ct", "HEAD"], cwd=source, text=True).strip())
     # Stage0 Darwin archives are selected and digest-checked by the pinned
     # src/stage0 manifest. Stage1 is built from the exact fork before building
     # target std and stage2 WASI rustc. Stage0 cannot build in-tree cross std.
