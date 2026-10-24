@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mode="${1:-}"
-if (( $# != 1 )) || [[ "$mode" != --locked && "$mode" != --candidate ]]; then
-  echo "usage: $0 --locked|--candidate" >&2
+performance_profile="${2:-}"
+if (( $# < 1 || $# > 2 )) || [[ "$mode" != --locked && "$mode" != --candidate ]] \
+  || [[ -n "$performance_profile" && ( "$mode" != --candidate || "$performance_profile" != --performance-profile ) ]]; then
+  echo "usage: $0 --locked | --candidate [--performance-profile]" >&2
   exit 2
 fi
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -56,17 +58,36 @@ PY
 )"
 llvm_args=(--set "llvm.targets=$llvm_targets" --set "llvm.experimental-targets=")
 mkdir -p "$work/logs"
+performance_args=()
+if [[ "$performance_profile" == --performance-profile ]]; then
+  # Candidate-only: bootstrap's contributor profile explicitly enables these
+  # expensive compiler-development options even when rust.debug=false.
+  # Keep release rebuilding byte-for-byte tied to its existing lock.
+  performance_args=(
+    --set rust.optimize=true
+    --set rust.debug-assertions=false
+    --set rust.debug-assertions-std=false
+    --set rust.debug-assertions-tools=false
+    --set rust.debug-logging=false
+    --set rust.incremental=false
+    --set rust.frame-pointers=false
+    --set rust.lto=thin
+  )
+  python3 "$root/scripts/audit-build-profile.py" "$work/rust" --performance-profile \
+    > "$work/logs/compiler-performance-profile.json"
+  printf 'Performance profile overrides are recorded in logs/compiler-performance-profile.json.\n' >> "$candidate_marker"
+fi
 (
   cd "$work/rust"
   env -u GITHUB_ACTIONS -u CI python3 x.py install \
     --jobs "$build_jobs" \
     --set build.vendor=true --set llvm.download-ci-llvm=false \
-    "${llvm_args[@]}" "${codegen_args[@]}" \
+    "${llvm_args[@]}" "${codegen_args[@]}" "${performance_args[@]}" \
     2>&1 | tee "$work/logs/rustc-build.log"
   env -u GITHUB_ACTIONS -u CI python3 x.py build library \
     --target wasm32-wasip1 --stage 1 --jobs "$build_jobs" \
     --set build.vendor=true --set llvm.download-ci-llvm=false \
-    "${llvm_args[@]}" "${codegen_args[@]}" \
+    "${llvm_args[@]}" "${codegen_args[@]}" "${performance_args[@]}" \
     2>&1 | tee "$work/logs/wasip1-sysroot-build.log"
 )
 if [[ "$mode" == --candidate ]]; then
