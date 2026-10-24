@@ -51,3 +51,17 @@ underlying Cargo release profile already uses optimization level 3; simply
 changing `rust.optimize = true` to `3` would not introduce another optimization.
 No speedup is asserted until the resulting artifact passes the app's gates and
 a matched physical measurement.
+
+### Physical qualification, October 25
+
+The full-LTO artifact is 79,051,505 bytes, SHA256
+`8f1b313ccb59bf43546e36cfcdbd04dac9b5c8388a6ffec23efe2148564c17e6`.
+The app snapshot `7c0bbf1`, using runtime source `2b97c92`, passed six
+physical iPhone 13 mini/iOS 26.5 gates with this artifact and the signed target
+sysroot. The isolated cold Tokio `rt,sync,time,io-util` profile took 29.778 s,
+with all dependency artifacts uncached and output checked. This individual
+sample does not establish the large Kameo/30-second acceptance target; general
+macro loading remains unsupported. These artifacts have not been promoted
+into the signed production toolchain. See the
+[app evidence](https://github.com/sergii-ziborov/Crabrix/blob/915cc1df41814c9c3637fd1a9366b7f50ad87888/docs/performance/2026-10-25-direct-emission.json)
+for device, thermal, correctness and timing limits.
