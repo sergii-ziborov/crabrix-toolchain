@@ -122,3 +122,26 @@ the source and signature boundaries, [UPSTREAM.md](UPSTREAM.md) records fork
 provenance, and [PATCHES.md](PATCHES.md) lists each local patch. The MIT
 [LICENSE](LICENSE) covers this builder recipe, not the Rust compiler or
 third-party components.
+
+## Crabrix product and legal information
+
+The native app and companion website are maintained in
+[Crabrix](https://github.com/sergii-ziborov/Crabrix); signed course data lives in
+[crabrix-courses](https://github.com/sergii-ziborov/crabrix-courses). The Academy
+contains 742 lessons and steps plus 46 editable examples. Native CoursePacks
+remain public and account-free; complete website lessons use a free account.
+Current iPhone, iPad and Duo screenshots belong to the app repository and
+[crabrix.com](https://crabrix.com/), rather than this engineering dependency.
+
+[About](https://crabrix.com/about/) · [Privacy](https://crabrix.com/privacy/) ·
+[Terms](https://crabrix.com/terms/) · [License library](https://crabrix.com/licenses/)
+
+This repository’s existing open-source license and original notices are
+unchanged. The proprietary app source and authored course corpus have separate
+terms; those terms do not restrict rights granted by this component’s license.
+App distribution archives use Xcode Cloud; GitHub documentation updates do not
+start an app build or deployment.
+
+## Current application workflow
+
+The [screenshot user guide](https://crabrix.com/guide/) explains the native compiler, prepared offline packages, build stages, local HTML/CSS/JavaScript preview and iPhone/iPad/Duo layouts. The [main application compatibility report](https://github.com/sergii-ziborov/Crabrix/blob/codex/compiler-output-practice-review/docs/offline-web-compatibility-2026-10-24.md) separates exact fixture outcomes from unverified capabilities. Package acquisition needs a connection for new archives; compilation and program execution remain on-device. The web preview does not supply TCP servers, native C toolchains, procedural macros or CUDA hardware.
