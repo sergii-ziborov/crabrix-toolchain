@@ -22,10 +22,13 @@ The physical target and reproducible Kameo/Tokio driver live in the app reposito
 
 `scripts/build-macos-compiler-candidate.py` is a separate experiment for the
 explicitly started **Compiler performance candidate (manual)** Xcode Cloud
-workflow. It cross-compiles only stage 1 WASI rustc using the pinned source,
+workflow. It cross-compiles the WASI rustc using the pinned source,
 four checksum-verified patches, the source's pinned Darwin stage0 manifest and
-checksum-verified WASI SDK 32. The compiler has only its Cranelift backend;
-building native LLVM and repackaging the target sysroot are outside this path.
+checksum-verified WASI SDK 32. A native stage1 compiler built from the same
+source is required before cross-compiling its standard library and stage2 WASI
+compiler. The intermediate Darwin compiler uses external LLVM 22.1.8; the final
+WASI compiler has only Cranelift. Building native LLVM from source and
+repackaging the target sysroot are outside this path.
 It applies the same performance overrides listed above.
 
 The script requires a fresh work/output directory and 30 GiB free. It records

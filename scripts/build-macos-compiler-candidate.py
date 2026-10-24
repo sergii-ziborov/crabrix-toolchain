@@ -81,7 +81,7 @@ def compile_with_heartbeat(command, source, environment, log):
         raise subprocess.CalledProcessError(status, command)
 
 
-def command_for(source, sdk, arch, jobs):
+def command_for(source, sdk, arch, jobs, llvm_config):
     triple = {"arm64": "aarch64-apple-darwin", "x86_64": "x86_64-apple-darwin"}[arch]
     settings = {
         "build.build": json.dumps(triple),
@@ -91,14 +91,17 @@ def command_for(source, sdk, arch, jobs):
         "build.vendor": "false",
         "build.extended": "false",
         "rust.download-rustc": "false",
-        "rust.codegen-backends": '["cranelift"]',
+        "rust.codegen-backends": '["llvm","cranelift"]',
+        f"target.{triple}.codegen-backends": '["llvm"]',
+        f"target.{triple}.llvm-config": json.dumps(str(llvm_config)),
+        "llvm.link-shared": "true",
         "target.wasm32-wasip1.codegen-backends": '["cranelift"]',
         "target.wasm32-wasip1.wasi-root": json.dumps(str(sdk / "share/wasi-sysroot")),
         "target.wasm32-wasip1.linker": json.dumps(str(sdk / "bin/clang")),
         "llvm.download-ci-llvm": "false",
         **PERFORMANCE,
     }
-    command = [sys.executable, "x.py", "build", "compiler/rustc", "--stage", "1", "--jobs", str(jobs)]
+    command = [sys.executable, "x.py", "build", "compiler/rustc", "--stage", "2", "--jobs", str(jobs)]
     for key, value in settings.items():
         command.extend(["--set", f"{key}={value}"])
     return command, settings
@@ -108,6 +111,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--llvm-config", type=Path, required=True,
+                        help="native LLVM 22.1.8, used only by the intermediate Darwin compiler")
     parser.add_argument("--plan", action="store_true", help="print exact inputs without fetching/building")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
@@ -119,7 +124,7 @@ def main():
     source = work / "rust"
     sdk_name = f"wasi-sdk-32.0-{arch}-macos"
     sdk = work / sdk_name
-    command, settings = command_for(source, sdk, arch, lock["bootstrap"]["buildJobs"])
+    command, settings = command_for(source, sdk, arch, lock["bootstrap"]["buildJobs"], args.llvm_config.resolve())
     plan = {
         "candidate": True,
         "productionReplacement": False,
@@ -142,6 +147,11 @@ def main():
     work.parent.mkdir(parents=True, exist_ok=True)
     if shutil.disk_usage(work.parent).free < 30 * 1024**3:
         parser.error("candidate build needs at least 30 GiB free on the ephemeral Mac")
+    llvm_version = subprocess.check_output([str(args.llvm_config), "--version"], text=True).strip()
+    if llvm_version != "22.1.8":
+        parser.error(f"candidate native LLVM must be exactly 22.1.8, received {llvm_version}")
+    plan["nativeLLVM"] = {"version": llvm_version, "llvmConfigSHA256": digest(args.llvm_config),
+                          "role": "intermediate Darwin compiler only; not bundled into WASI candidate"}
     work.mkdir()
     (work / "CANDIDATE-NOT-FOR-RELEASE.txt").write_text("Compiler-only native macOS experiment. Not a locked release.\n")
     run([sys.executable, str(root / "scripts/validate-lock.py"), "--source-only"])
@@ -169,14 +179,15 @@ def main():
     environment.update(WASI_SDK_PATH=str(sdk), WASI_SYSROOT=str(sdk / "share/wasi-sysroot"),
                        CARGO_HOME=str(work / "cargo-home"))
     # Stage0 Darwin archives are selected and digest-checked by the pinned
-    # src/stage0 manifest. No moving rustup toolchain or host LLVM source build.
+    # src/stage0 manifest. Stage1 is built from the exact fork before building
+    # target std and stage2 WASI rustc. Stage0 cannot build in-tree cross std.
     for key in ("GITHUB_ACTIONS", "CI"):
         environment.pop(key, None)
     (work / "build-plan.json").write_text(json.dumps(plan, indent=2) + "\n")
     run([sys.executable, str(root / "scripts/audit-build-profile.py"), str(source), "--performance-profile"])
     started = time.monotonic()
     compile_with_heartbeat(command, source, environment, work / "compiler-build.log")
-    binary = source / "build/wasm32-wasip1/stage1/bin/rustc.wasm"
+    binary = source / "build/wasm32-wasip1/stage2/bin/rustc.wasm"
     if not binary.is_file():
         binary = binary.with_name("rustc")
     with binary.open("rb") as stream:
