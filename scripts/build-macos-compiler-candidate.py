@@ -81,7 +81,7 @@ def compile_with_heartbeat(command, source, environment, log):
         raise subprocess.CalledProcessError(status, command)
 
 
-def command_for(source, sdk, arch, jobs, llvm_config, lto="thin"):
+def command_for(source, sdk, arch, jobs, llvm_config, lto="thin", proc_macro_bridge=False):
     triple = {"arm64": "aarch64-apple-darwin", "x86_64": "x86_64-apple-darwin"}[arch]
     settings = {
         "build.build": json.dumps(triple),
@@ -102,6 +102,12 @@ def command_for(source, sdk, arch, jobs, llvm_config, lto="thin"):
         **PERFORMANCE,
         "rust.lto": lto,
     }
+    if proc_macro_bridge:
+        settings["target.wasm32-wasip1.rustflags"] = json.dumps([
+            "-Clink-arg=-Wl,--export-if-defined=__crabrix_pm_alloc",
+            "-Clink-arg=-Wl,--export-if-defined=__crabrix_pm_free",
+            "-Clink-arg=-Wl,--export-if-defined=__crabrix_pm_dispatch",
+        ])
     command = [sys.executable, "x.py", "build", "compiler/rustc", "--stage", "2", "--jobs", str(jobs)]
     for key, value in settings.items():
         command.extend(["--set", f"{key}={value}"])
@@ -116,6 +122,8 @@ def main():
                         help="native LLVM 22.1.8, used only by the intermediate Darwin compiler")
     parser.add_argument("--lto", choices=("thin", "fat"), default="thin",
                         help="candidate-only whole-compiler optimization; thin retains the measured baseline")
+    parser.add_argument("--proc-macro-bridge", action="store_true",
+                        help="apply the experimental WASI RPC macro loader patch; never a release input")
     parser.add_argument("--plan", action="store_true", help="print exact inputs without fetching/building")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
@@ -127,7 +135,7 @@ def main():
     source = work / "rust"
     sdk_name = f"wasi-sdk-32.0-{arch}-macos"
     sdk = work / sdk_name
-    command, settings = command_for(source, sdk, arch, lock["bootstrap"]["buildJobs"], args.llvm_config.resolve(), args.lto)
+    command, settings = command_for(source, sdk, arch, lock["bootstrap"]["buildJobs"], args.llvm_config.resolve(), args.lto, args.proc_macro_bridge)
     plan = {
         "candidate": True,
         "productionReplacement": False,
@@ -139,6 +147,12 @@ def main():
         "settings": settings,
         "command": command,
     }
+    bridge_patch = root / "patches/0005-wasi-proc-macro-bridge.candidate.patch"
+    if args.proc_macro_bridge:
+        plan["experimentalProcMacroBridge"] = {
+            "schemaVersion": 1, "patch": bridge_patch.name, "sha256": digest(bridge_patch),
+            "compilerOptInEnvironment": "CRABRIX_WASM_PROC_MACROS=1",
+        }
     if args.plan:
         print(json.dumps(plan, indent=2))
         return
@@ -174,6 +188,11 @@ def main():
     environment = dict(os.environ, CRABRIX_TOOLCHAIN_WORK=str(work),
                        CG_CLIF_FORCE_GNU_AS="1", CARGO_NET_OFFLINE="false", TZ="UTC")
     run([str(root / "scripts/apply-patches.sh"), "--candidate"], env=environment)
+    if args.proc_macro_bridge:
+        if digest(bridge_patch) != plan["experimentalProcMacroBridge"]["sha256"]:
+            raise ValueError("experimental bridge patch changed after input recording")
+        run(["git", "apply", "--check", str(bridge_patch)], cwd=source)
+        run(["git", "apply", str(bridge_patch)], cwd=source)
     archive = work / f"{sdk_name}.tar.gz"
     run(["/usr/bin/curl", "--fail", "--location", "--retry", "3", "--output", str(archive), plan["sdk"]["url"]])
     if digest(archive) != plan["sdk"]["sha256"]:

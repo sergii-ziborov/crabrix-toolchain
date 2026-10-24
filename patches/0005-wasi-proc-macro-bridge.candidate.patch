@@ -1,0 +1,531 @@
+diff --git a/compiler/rustc_codegen_cranelift/riwl/src/link.rs b/compiler/rustc_codegen_cranelift/riwl/src/link.rs
+index 5b1249ed473..085944e51dc 100644
+--- a/compiler/rustc_codegen_cranelift/riwl/src/link.rs
++++ b/compiler/rustc_codegen_cranelift/riwl/src/link.rs
+@@ -563,6 +563,7 @@ fn add_object_symbols(
+     // ---- entry/export resolution (still inside the immutable-borrow region) ----
+     let entry_name = "_start";
+     let mut export_list: Vec<(String, u8, u32)> = vec![("memory".into(), 0x02, 0)];
++    let mut exported_data_addresses = Vec::new();
+     {
+         let mut exported = std::collections::HashSet::new();
+         if !opts.no_entry {
+@@ -590,6 +591,12 @@ fn add_object_symbols(
+                     let t = Target::Func(dpos, *local_index);
+                     export_list.push((name.clone(), 0x00, out_func_index(&t)?));
+                 }
++                SymDef::Data { segment, offset, .. } => {
++                    let address = data_addr(&Target::Data(dpos, *segment, *offset))?;
++                    let global = 1 + synth_globals.len() as u32 + exported_data_addresses.len() as u32;
++                    exported_data_addresses.push(address);
++                    export_list.push((name.clone(), 0x03, global));
++                }
+                 other => bail!("--export {name}: unsupported symbol kind {other:?}"),
+             }
+             exported.insert(name.clone());
+@@ -684,7 +691,7 @@ fn add_object_symbols(
+ 
+     // globals: __stack_pointer + synthetics (__memory_base/__table_base/__tls_*)
+     let mut p = Vec::new();
+-    uleb(&mut p, 1 + synth_globals.len() as u64);
++    uleb(&mut p, 1 + synth_globals.len() as u64 + exported_data_addresses.len() as u64);
+     p.push(0x7f);
+     p.push(0x01); // i32 mutable
+     p.push(0x41); // i32.const
+@@ -697,6 +704,11 @@ fn add_object_symbols(
+         sleb(&mut p, value as i64);
+         p.push(0x0b);
+     }
++    for &address in &exported_data_addresses {
++        p.extend_from_slice(&[0x7f, 0x00, 0x41]); // immutable i32 address
++        sleb(&mut p, address as i32 as i64);
++        p.push(0x0b);
++    }
+     e.section(6, &p);
+ 
+     // export (resolved earlier, before the mutable patch pass)
+diff --git a/compiler/rustc_codegen_ssa/src/back/link.rs b/compiler/rustc_codegen_ssa/src/back/link.rs
+index 8188aa0e81e..30801992f05 100644
+--- a/compiler/rustc_codegen_ssa/src/back/link.rs
++++ b/compiler/rustc_codegen_ssa/src/back/link.rs
+@@ -831,6 +831,14 @@ fn link_natively(
+     codegen_backend: &'static str,
+ ) {
+     info!("preparing {:?} to {:?}", crate_type, out_filename);
++    #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
++    if crate_type == CrateType::ProcMacro
++        && sess.target.is_like_wasm
++        && env::var("CRABRIX_WASM_PROC_MACROS").as_deref() == Ok("1")
++    {
++        link_wasi_proc_macro(sess, out_filename, compiled_modules, crate_info, metadata);
++        return;
++    }
+     let (linker_path, flavor) = linker_and_flavor(sess);
+     let self_contained_components = self_contained_components(sess, crate_type, &linker_path);
+ 
+@@ -1209,6 +1217,51 @@ fn link_natively(
+     }
+ }
+ 
++/// A proc macro is a static reactor containing its ordinary Rust metadata and
++/// versioned RPC exports. No --shared/PIC emulation or native dlopen is used.
++#[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
++fn link_wasi_proc_macro(
++    sess: &Session, output: &Path, modules: &CompiledModules,
++    info: &CrateInfo, metadata: &EncodedMetadata,
++) {
++    let mut options = riwl::LinkOptions::default();
++    options.no_entry = true;
++    options.stack_size = 1024 * 1024;
++    options.exports = [
++        "__crabrix_pm_alloc", "__crabrix_pm_free", "__crabrix_pm_metadata",
++        "__crabrix_pm_expand", "__wasm_call_ctors",
++    ].iter().map(|name| name.to_string()).collect();
++    options.exports.extend(info.exported_symbols[&CrateType::ProcMacro].iter().map(|(name, _)| name.clone()));
++    for module in &modules.modules {
++        if let Some(path) = &module.object { options.inputs.push(path.clone()); }
++    }
++    if let Some(path) = modules.allocator_module.as_ref().and_then(|module| module.object.as_ref()) {
++        options.inputs.push(path.clone());
++    }
++    each_linked_rlib(info, Some(CrateType::ProcMacro), &mut |_, path| {
++        options.inputs.push(path.to_owned());
++    }).unwrap_or_else(|error| sess.dcx().fatal(format!("macro dependencies: {error:?}")));
++    options.inputs.push(sess.target_tlib_path.dir.join("self-contained/libc.a"));
++    let mut bytes = riwl::link(&options)
++        .unwrap_or_else(|error| sess.dcx().fatal(format!("macro reactor link: {error:#}")));
++    // Match the default dylib metadata loader's .rustc representation exactly.
++    let mut section = vec![6];
++    section.extend_from_slice(b".rustc");
++    section.extend_from_slice(rustc_metadata::METADATA_HEADER);
++    section.extend_from_slice(&(metadata.stub_or_full().len() as u64).to_le_bytes());
++    section.extend_from_slice(metadata.stub_or_full());
++    bytes.push(0);
++    let mut size = section.len();
++    loop {
++        let byte = (size & 0x7f) as u8;
++        size >>= 7;
++        bytes.push(byte | if size == 0 { 0 } else { 0x80 });
++        if size == 0 { break; }
++    }
++    bytes.extend_from_slice(&section);
++    fs::write(output, bytes).unwrap_or_else(|error| sess.dcx().fatal(format!("macro reactor output: {error}")));
++}
++
+ fn strip_with_external_utility(sess: &Session, util: &str, out_filename: &Path, options: &[&str]) {
+     let mut cmd = Command::new(util);
+     cmd.args(options);
+diff --git a/compiler/rustc_metadata/src/creader.rs b/compiler/rustc_metadata/src/creader.rs
+index 598c4de27bf..af7fcd2006d 100644
+--- a/compiler/rustc_metadata/src/creader.rs
++++ b/compiler/rustc_metadata/src/creader.rs
+@@ -915,6 +915,12 @@ fn dlsym_proc_macros(
+         let sym_name = sess.generate_proc_macro_decls_symbol(stable_crate_id);
+         debug!("trying to dlsym proc_macros {} for symbol `{}`", path.display(), sym_name);
+ 
++        #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
++        if std::env::var("CRABRIX_WASM_PROC_MACROS").as_deref() == Ok("1") {
++            return rustc_proc_macro::bridge::wasm::load(path, &sym_name)
++                .map_err(|error| CrateError::DlOpen(path.display().to_string(), error.to_string()));
++        }
++
+         unsafe {
+             let result = load_symbol_from_dylib::<*const &[ProcMacro]>(path, &sym_name);
+             match result {
+diff --git a/compiler/rustc_session/src/output.rs b/compiler/rustc_session/src/output.rs
+index cce65602dcd..7a06d1e8253 100644
+--- a/compiler/rustc_session/src/output.rs
++++ b/compiler/rustc_session/src/output.rs
+@@ -134,6 +134,15 @@ pub fn invalid_output_for_target(sess: &Session, crate_type: CrateType) -> bool
+     if let CrateType::ProcMacro | CrateType::Dylib = crate_type
+         && sess.target.only_cdylib
+     {
++        // A macro reactor is statically linked WASM, never a native dylib.
++        // This opt-in does not alter target metadata or relax std matching.
++        #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
++        if crate_type == CrateType::ProcMacro
++            && sess.target.is_like_wasm
++            && std::env::var("CRABRIX_WASM_PROC_MACROS").as_deref() == Ok("1")
++        {
++            return false;
++        }
+         return true;
+     }
+     if let CrateType::Executable = crate_type
+diff --git a/library/proc_macro/src/bridge/client.rs b/library/proc_macro/src/bridge/client.rs
+index 696cd4ee3d8..0a686227ba0 100644
+--- a/library/proc_macro/src/bridge/client.rs
++++ b/library/proc_macro/src/bridge/client.rs
+@@ -12,7 +12,7 @@ pub(super) struct HandleCounters {
+     pub(super) span: AtomicU32,
+ }
+ 
+-static COUNTERS: HandleCounters =
++pub(super) static COUNTERS: HandleCounters =
+     HandleCounters { token_stream: AtomicU32::new(1), span: AtomicU32::new(1) };
+ 
+ pub(crate) struct TokenStream {
+@@ -211,6 +211,9 @@ pub(crate) fn is_available() -> bool {
+ pub struct Client<I, O> {
+     pub(super) handle_counters: &'static HandleCounters,
+ 
++    #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
++    pub(super) remote: Option<super::wasm::RemoteClient>,
++
+     pub(super) run: extern "C" fn(BridgeConfig<'_>) -> Buffer,
+ 
+     pub(super) _marker: PhantomData<fn(I) -> O>,
+@@ -295,6 +298,8 @@ impl Client<crate::TokenStream, crate::TokenStream> {
+     pub const fn expand1(f: impl Fn(crate::TokenStream) -> crate::TokenStream + Copy) -> Self {
+         Client {
+             handle_counters: &COUNTERS,
++            #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
++            remote: None,
+             run: super::selfless_reify::reify_to_extern_c_fn_hrt_bridge(move |bridge| {
+                 run_client(bridge, |input| f(crate::TokenStream(Some(input))).0)
+             }),
+@@ -309,6 +314,8 @@ pub const fn expand2(
+     ) -> Self {
+         Client {
+             handle_counters: &COUNTERS,
++            #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
++            remote: None,
+             run: super::selfless_reify::reify_to_extern_c_fn_hrt_bridge(move |bridge| {
+                 run_client(bridge, |(input, input2)| {
+                     f(crate::TokenStream(Some(input)), crate::TokenStream(Some(input2))).0
+diff --git a/library/proc_macro/src/bridge/mod.rs b/library/proc_macro/src/bridge/mod.rs
+index 72f4e2dcdd7..2beebf5d20b 100644
+--- a/library/proc_macro/src/bridge/mod.rs
++++ b/library/proc_macro/src/bridge/mod.rs
+@@ -106,6 +106,9 @@ fn ts_into_trees(
+ pub mod server;
+ #[allow(unsafe_code)]
+ mod symbol;
++#[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
++#[allow(unsafe_code, missing_docs)]
++pub mod wasm;
+ 
+ use buffer::Buffer;
+ pub use rpc::PanicMessage;
+diff --git a/library/proc_macro/src/bridge/server.rs b/library/proc_macro/src/bridge/server.rs
+index 1151798fccf..10f7af70901 100644
+--- a/library/proc_macro/src/bridge/server.rs
++++ b/library/proc_macro/src/bridge/server.rs
+@@ -87,7 +87,7 @@ macro_rules! define_dispatcher {
+         $(fn $method:ident($($arg:ident: $arg_ty:ty),* $(,)?) $(-> $ret_ty:ty)?;)*
+     ) => {
+         impl<S: Server> Dispatcher<S> {
+-            fn dispatch(&mut self, mut buf: Buffer) -> Buffer {
++            pub(super) fn dispatch(&mut self, mut buf: Buffer) -> Buffer {
+                 let Dispatcher { handle_store, server } = self;
+ 
+                 let mut reader = &buf[..];
+@@ -251,6 +251,8 @@ fn run_server<
+     input: I,
+     run_client: extern "C" fn(BridgeConfig<'_>) -> Buffer,
+     force_show_panics: bool,
++    #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
++    remote: Option<super::wasm::RemoteClient>,
+ ) -> Result<O, PanicMessage> {
+     let mut dispatcher = Dispatcher { handle_store: HandleStore::new(handle_counters), server };
+ 
+@@ -260,7 +262,16 @@ fn run_server<
+     (<ExpnGlobals<MarkedSpan<S>> as Mark>::mark(globals), input)
+         .encode(&mut buf, &mut dispatcher.handle_store);
+ 
+-    buf = strategy.run_bridge_and_client(&mut dispatcher, buf, run_client, force_show_panics);
++    #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
++    let remote_result = remote.map(|remote| {
++        super::wasm::run_remote(remote, &mut dispatcher, buf.take(), force_show_panics)
++    });
++    #[cfg(not(all(target_arch = "wasm32", target_os = "wasi")))]
++    let remote_result: Option<Buffer> = None;
++    buf = match remote_result {
++        Some(result) => result,
++        None => strategy.run_bridge_and_client(&mut dispatcher, buf, run_client, force_show_panics),
++    };
+ 
+     Result::decode(&mut &buf[..], &mut dispatcher.handle_store)
+ }
+@@ -276,7 +287,7 @@ pub fn run<S>(
+     where
+         S: Server,
+     {
+-        let client::Client { handle_counters, run, _marker } = *self;
++        let client::Client { handle_counters, run, _marker, .. } = *self;
+         run_server(
+             strategy,
+             handle_counters,
+@@ -284,6 +295,8 @@ pub fn run<S>(
+             <MarkedTokenStream<S>>::mark(input),
+             run,
+             force_show_panics,
++            #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
++            self.remote,
+         )
+         .map(|s| <Option<MarkedTokenStream<S>>>::unmark(s).unwrap_or_default())
+     }
+@@ -301,7 +314,7 @@ pub fn run<S>(
+     where
+         S: Server,
+     {
+-        let client::Client { handle_counters, run, _marker } = *self;
++        let client::Client { handle_counters, run, _marker, .. } = *self;
+         run_server(
+             strategy,
+             handle_counters,
+@@ -309,6 +322,8 @@ pub fn run<S>(
+             (<MarkedTokenStream<S>>::mark(input), <MarkedTokenStream<S>>::mark(input2)),
+             run,
+             force_show_panics,
++            #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
++            self.remote,
+         )
+         .map(|s| <Option<MarkedTokenStream<S>>>::unmark(s).unwrap_or_default())
+     }
+diff --git a/library/proc_macro/src/bridge/wasm.rs b/library/proc_macro/src/bridge/wasm.rs
+new file mode 100644
+index 00000000000..35639964ca4
+--- /dev/null
++++ b/library/proc_macro/src/bridge/wasm.rs
+@@ -0,0 +1,240 @@
++//! Versioned, bounded transport for the existing proc-macro RPC protocol.
++//!
++//! Each macro runs in a separate WASI store. Only serialized bytes cross the
++//! host boundary: token and span handles continue to belong to rustc's normal
++//! Dispatcher. No client pointer, allocator or function-table index crosses
++//! between stores. The host must enforce aggregate fuel, deadline and memory
++//! limits and restrict module loading to declared build inputs.
++
++use std::cell::RefCell;
++use std::io::{self, ErrorKind};
++use std::path::Path;
++
++use super::client::{Client, ProcMacro};
++use super::server::{Dispatcher, Server};
++use super::{BridgeConfig, Buffer};
++
++const MAX_MESSAGE: usize = 16 * 1024 * 1024;
++const MAX_MACROS: usize = 4096;
++const LOAD: u32 = 1;
++const EXPAND: u32 = 2;
++const DISPATCH: u32 = 3;
++
++#[link(wasm_import_module = "crabrix_proc_macro_v1")]
++unsafe extern "C" {
++    fn exchange(operation: u32, module: u32, index: u32, ptr: *const u8, len: u32, flags: u32) -> u32;
++    fn read_reply(ptr: *mut u8, len: u32) -> u32;
++}
++
++#[derive(Clone, Copy)]
++pub(super) struct RemoteClient {
++    module: u32,
++    index: u32,
++}
++
++fn call(operation: u32, remote: RemoteClient, input: &[u8], flags: u32) -> Vec<u8> {
++    assert!(input.len() <= MAX_MESSAGE, "proc-macro request exceeds transport limit");
++    // The host copies the request before invoking another store. Its reply
++    // remains owned by this caller until read_reply consumes it exactly once.
++    let length = unsafe {
++        exchange(operation, remote.module, remote.index, input.as_ptr(), input.len() as u32, flags)
++    } as usize;
++    assert!(length <= MAX_MESSAGE, "proc-macro reply exceeds transport limit");
++    let mut output = vec![0; length];
++    let copied = unsafe { read_reply(output.as_mut_ptr(), length as u32) };
++    assert_eq!(copied as usize, length, "incomplete proc-macro reply");
++    output
++}
++
++fn word(out: &mut Vec<u8>, value: u32) {
++    out.extend_from_slice(&value.to_le_bytes());
++}
++
++fn text(out: &mut Vec<u8>, value: &str) {
++    assert!(value.len() <= 16 * 1024);
++    word(out, value.len() as u32);
++    out.extend_from_slice(value.as_bytes());
++}
++
++struct Reader<'a>(&'a [u8]);
++
++impl<'a> Reader<'a> {
++    fn word(&mut self) -> io::Result<u32> {
++        let (bytes, rest) = self.0.split_at_checked(4).ok_or_else(invalid)?;
++        self.0 = rest;
++        Ok(u32::from_le_bytes(bytes.try_into().unwrap()))
++    }
++
++    fn text(&mut self) -> io::Result<&'static str> {
++        let length = self.word()? as usize;
++        if length > 16 * 1024 { return Err(invalid()); }
++        let (bytes, rest) = self.0.split_at_checked(length).ok_or_else(invalid)?;
++        self.0 = rest;
++        let value = std::str::from_utf8(bytes).map_err(|_| invalid())?;
++        // rustc's existing macro declarations have process-long lifetimes.
++        // This allocation is released when the compiler store is discarded.
++        Ok(Box::leak(value.to_owned().into_boxed_str()))
++    }
++}
++
++fn invalid() -> io::Error {
++    io::Error::new(ErrorKind::InvalidData, "invalid Crabrix proc-macro v1 declaration")
++}
++
++impl<I, O> Client<I, O> {
++    fn remote(module: u32, index: u32) -> Self {
++        extern "C" fn unavailable(_: BridgeConfig<'_>) -> Buffer {
++            panic!("remote proc-macro invoked without its transport")
++        }
++        Self {
++            handle_counters: &super::client::COUNTERS,
++            remote: Some(RemoteClient { module, index }),
++            run: unavailable,
++            _marker: std::marker::PhantomData,
++        }
++    }
++}
++
++/// Load a reactor and decode only its declarations; no Rust ABI is shared.
++pub fn load(path: &Path, symbol: &str) -> io::Result<&'static [ProcMacro]> {
++    let mut request = Vec::new();
++    text(&mut request, path.to_str().ok_or_else(invalid)?);
++    text(&mut request, symbol);
++    let bytes = call(LOAD, RemoteClient { module: 0, index: 0 }, &request, 0);
++    let mut reader = Reader(&bytes);
++    if reader.word()? != 1 { return Err(invalid()); }
++    let module = reader.word()?;
++    let count = reader.word()? as usize;
++    if module == 0 || count > MAX_MACROS { return Err(invalid()); }
++    let mut macros = Vec::with_capacity(count);
++    for index in 0..count {
++        let kind = reader.word()?;
++        let name = reader.text()?;
++        if name.is_empty() { return Err(invalid()); }
++        macros.push(match kind {
++            0 => ProcMacro::Bang { name, client: Client::remote(module, index as u32) },
++            1 => ProcMacro::Attr { name, client: Client::remote(module, index as u32) },
++            2 => {
++                let count = reader.word()? as usize;
++                if count > MAX_MACROS { return Err(invalid()); }
++                let mut attributes = Vec::with_capacity(count);
++                for _ in 0..count { attributes.push(reader.text()?); }
++                ProcMacro::CustomDerive {
++                    trait_name: name,
++                    attributes: Box::leak(attributes.into_boxed_slice()),
++                    client: Client::remote(module, index as u32),
++                }
++            }
++            _ => return Err(invalid()),
++        });
++    }
++    if !reader.0.is_empty() { return Err(invalid()); }
++    Ok(Box::leak(macros.into_boxed_slice()))
++}
++
++// The erased pointer is installed only while run_remote owns the closure.
++// A guard removes it on unwind. Nested expansions push separate dispatchers;
++// their handles and symbol stores never enter another macro's client TLS.
++type DispatchFn = dyn FnMut(Buffer) -> Buffer;
++thread_local! {
++    static DISPATCHERS: RefCell<Vec<*mut DispatchFn>> = RefCell::new(Vec::new());
++}
++
++pub(super) fn run_remote<S: Server>(
++    remote: RemoteClient, dispatcher: &mut Dispatcher<S>, input: Buffer, panics: bool,
++) -> Buffer {
++    let mut dispatch = |buffer| dispatcher.dispatch(buffer);
++    let borrowed: &mut (dyn FnMut(Buffer) -> Buffer + '_) = &mut dispatch;
++    // SAFETY: this erases a lifetime, not the closure's type. The pointer cannot
++    // escape this dynamic scope; no RefCell borrow is held over guest execution.
++    let erased: *mut DispatchFn = unsafe { std::mem::transmute(borrowed) };
++    DISPATCHERS.with(|stack| stack.borrow_mut().push(erased));
++    struct Guard;
++    impl Drop for Guard {
++        fn drop(&mut self) { DISPATCHERS.with(|stack| { stack.borrow_mut().pop().unwrap(); }); }
++    }
++    let _guard = Guard;
++    Buffer::from(call(EXPAND, remote, &input, u32::from(panics)))
++}
++
++// Exported buffers are allocated, consumed and freed in the same store. The
++// trusted host must pass exactly the pointer/length returned by alloc or reply;
++// it never forwards a pointer from a different store.
++#[unsafe(no_mangle)]
++pub extern "C" fn __crabrix_pm_alloc(length: u32) -> u32 {
++    assert!(length as usize <= MAX_MESSAGE);
++    Box::into_raw(vec![0; length as usize].into_boxed_slice()) as *mut u8 as u32
++}
++
++unsafe fn take(pointer: u32, length: u32) -> Box<[u8]> {
++    assert!(length as usize <= MAX_MESSAGE);
++    unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(pointer as *mut u8, length as usize)) }
++}
++
++#[unsafe(no_mangle)]
++pub unsafe extern "C" fn __crabrix_pm_free(pointer: u32, length: u32) {
++    drop(unsafe { take(pointer, length) });
++}
++
++fn reply(bytes: &[u8]) -> u64 {
++    assert!(bytes.len() <= MAX_MESSAGE);
++    let length = bytes.len() as u64;
++    let pointer = Box::into_raw(bytes.to_vec().into_boxed_slice()) as *mut u8 as u32;
++    (length << 32) | u64::from(pointer)
++}
++
++/// Called only by the host while run_remote has installed its dispatcher.
++#[unsafe(no_mangle)]
++pub unsafe extern "C" fn __crabrix_pm_dispatch(pointer: u32, length: u32) -> u64 {
++    let input = Buffer::from(unsafe { take(pointer, length) }.into_vec());
++    let callback = DISPATCHERS.with(|stack| *stack.borrow().last().expect("no active macro server"));
++    let output = unsafe { (&mut *callback)(input) };
++    reply(&output)
++}
++
++unsafe fn declarations(pointer: u32) -> &'static [ProcMacro] {
++    // The generated, exported proc-macro declarations static is a slice. Its
++    // address is resolved within this instance, never in the compiler's memory.
++    let declarations = unsafe { *(pointer as *const &'static [ProcMacro]) };
++    assert!(declarations.len() <= MAX_MACROS);
++    declarations
++}
++
++#[unsafe(no_mangle)]
++pub unsafe extern "C" fn __crabrix_pm_metadata(pointer: u32) -> u64 {
++    let declarations = unsafe { declarations(pointer) };
++    let mut bytes = Vec::new();
++    word(&mut bytes, declarations.len() as u32);
++    for declaration in declarations {
++        let kind = match declaration {
++            ProcMacro::Bang { .. } => 0,
++            ProcMacro::Attr { .. } => 1,
++            ProcMacro::CustomDerive { .. } => 2,
++        };
++        word(&mut bytes, kind);
++        text(&mut bytes, declaration.name());
++        if let ProcMacro::CustomDerive { attributes, .. } = declaration {
++            assert!(attributes.len() <= MAX_MACROS);
++            word(&mut bytes, attributes.len() as u32);
++            for attribute in *attributes { text(&mut bytes, attribute); }
++        }
++    }
++    reply(&bytes)
++}
++
++#[unsafe(no_mangle)]
++pub unsafe extern "C" fn __crabrix_pm_expand(
++    declarations_pointer: u32, index: u32, pointer: u32, length: u32, panics: u32,
++) -> u64 {
++    let declaration = &unsafe { declarations(declarations_pointer) }[index as usize];
++    let input = Buffer::from(unsafe { take(pointer, length) }.into_vec());
++    let mut dispatch = |buffer: Buffer| {
++        Buffer::from(call(DISPATCH, RemoteClient { module: 0, index: 0 }, &buffer, 0))
++    };
++    let config = BridgeConfig { input, dispatch: (&mut dispatch).into(), force_show_panics: panics != 0 };
++    let output = match declaration {
++        ProcMacro::Bang { client, .. } | ProcMacro::CustomDerive { client, .. } => (client.run)(config),
++        ProcMacro::Attr { client, .. } => (client.run)(config),
++    };
++    reply(&output)
++}

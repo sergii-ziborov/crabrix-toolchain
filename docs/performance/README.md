@@ -65,3 +65,7 @@ macro loading remains unsupported. These artifacts have not been promoted
 into the signed production toolchain. See the
 [app evidence](https://github.com/sergii-ziborov/Crabrix/blob/915cc1df41814c9c3637fd1a9366b7f50ad87888/docs/performance/2026-10-25-direct-emission.json)
 for device, thermal, correctness and timing limits.
+
+### Completed cold repeats, October 25
+
+Two same-process physical iPhone repeats passed with fresh root source and all three dependency artifacts asserted uncached: **27.881 s** and **28.537 s**, nominal thermal state at both ends. Both checked `tokio offline: 42`; 2/2 runs, zero failures. The first six-gate session measured 29.778 s. These are the selected Tokio `rt,sync,time,io-util` profile, not the unchanged 32-package Kameo target or Axum. Evidence: app `build/compiler-optimization-20261024/direct-emission-cold-repeat-device.xcresult`; machine-readable public record `docs/performance/2026-10-25-direct-emission.json`.
