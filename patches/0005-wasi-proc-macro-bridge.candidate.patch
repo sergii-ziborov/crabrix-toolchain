@@ -45,7 +45,7 @@ index 5b1249ed473..085944e51dc 100644
  
      // export (resolved earlier, before the mutable patch pass)
 diff --git a/compiler/rustc_codegen_ssa/src/back/link.rs b/compiler/rustc_codegen_ssa/src/back/link.rs
-index 8188aa0e81e..30801992f05 100644
+index 8188aa0e81e..db89637d716 100644
 --- a/compiler/rustc_codegen_ssa/src/back/link.rs
 +++ b/compiler/rustc_codegen_ssa/src/back/link.rs
 @@ -831,6 +831,14 @@ fn link_natively(
@@ -90,7 +90,7 @@ index 8188aa0e81e..30801992f05 100644
 +    }
 +    each_linked_rlib(info, Some(CrateType::ProcMacro), &mut |_, path| {
 +        options.inputs.push(path.to_owned());
-+    }).unwrap_or_else(|error| sess.dcx().fatal(format!("macro dependencies: {error:?}")));
++    }).unwrap_or_else(|error| sess.dcx().emit_fatal(error));
 +    options.inputs.push(sess.target_tlib_path.dir.join("self-contained/libc.a"));
 +    let mut bytes = riwl::link(&options)
 +        .unwrap_or_else(|error| sess.dcx().fatal(format!("macro reactor link: {error:#}")));
