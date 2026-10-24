@@ -17,3 +17,22 @@ Normal `--locked` and plain `--candidate` invocations retain their existing beha
 Build prerequisites remain a controlled Linux x86_64 environment, at least 8 GiB RAM and 30 GiB free disk; no GitHub Actions are enabled. `audit-build-profile.py` runs on the source checkout alone and rejects unreviewed included configuration files.
 
 The physical target and reproducible Kameo/Tokio driver live in the app repository under `docs/benchmarks/kameo-actors`. Procedural macro loading and persistent guest incremental-cache locking are separate compatibility requirements.
+
+## Manual macOS compiler-only candidate
+
+`scripts/build-macos-compiler-candidate.py` is a separate experiment for the
+explicitly started **Compiler performance candidate (manual)** Xcode Cloud
+workflow. It cross-compiles only stage 1 WASI rustc using the pinned source,
+four checksum-verified patches, the source's pinned Darwin stage0 manifest and
+checksum-verified WASI SDK 32. The compiler has only its Cranelift backend;
+building native LLVM and repackaging the target sysroot are outside this path.
+It applies the same performance overrides listed above.
+
+The script requires a fresh work/output directory and 30 GiB free. It records
+the complete command, hashes and provenance and emits progress every 30 seconds.
+`--plan` prints inputs without fetching or compiling. It never alters the Linux
+release recipe, the app's signed toolchain, or production release inventories.
+
+This is an unqualified candidate until the app's separate test bundle proves
+compatibility with the signed target sysroot and representative diagnostics and
+programs. A successful Cloud build is not an iPhone performance measurement.
