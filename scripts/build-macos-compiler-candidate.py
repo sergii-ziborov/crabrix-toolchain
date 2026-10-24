@@ -81,7 +81,7 @@ def compile_with_heartbeat(command, source, environment, log):
         raise subprocess.CalledProcessError(status, command)
 
 
-def command_for(source, sdk, arch, jobs, llvm_config):
+def command_for(source, sdk, arch, jobs, llvm_config, lto="thin"):
     triple = {"arm64": "aarch64-apple-darwin", "x86_64": "x86_64-apple-darwin"}[arch]
     settings = {
         "build.build": json.dumps(triple),
@@ -100,6 +100,7 @@ def command_for(source, sdk, arch, jobs, llvm_config):
         "target.wasm32-wasip1.linker": json.dumps(str(sdk / "bin/clang")),
         "llvm.download-ci-llvm": "false",
         **PERFORMANCE,
+        "rust.lto": lto,
     }
     command = [sys.executable, "x.py", "build", "compiler/rustc", "--stage", "2", "--jobs", str(jobs)]
     for key, value in settings.items():
@@ -113,6 +114,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--llvm-config", type=Path, required=True,
                         help="native LLVM 22.1.8, used only by the intermediate Darwin compiler")
+    parser.add_argument("--lto", choices=("thin", "fat"), default="thin",
+                        help="candidate-only whole-compiler optimization; thin retains the measured baseline")
     parser.add_argument("--plan", action="store_true", help="print exact inputs without fetching/building")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
@@ -124,7 +127,7 @@ def main():
     source = work / "rust"
     sdk_name = f"wasi-sdk-32.0-{arch}-macos"
     sdk = work / sdk_name
-    command, settings = command_for(source, sdk, arch, lock["bootstrap"]["buildJobs"], args.llvm_config.resolve())
+    command, settings = command_for(source, sdk, arch, lock["bootstrap"]["buildJobs"], args.llvm_config.resolve(), args.lto)
     plan = {
         "candidate": True,
         "productionReplacement": False,

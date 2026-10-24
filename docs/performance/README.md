@@ -39,3 +39,15 @@ release recipe, the app's signed toolchain, or production release inventories.
 This is an unqualified candidate until the app's separate test bundle proves
 compatibility with the signed target sysroot and representative diagnostics and
 programs. A successful Cloud build is not an iPhone performance measurement.
+
+### Whole-compiler LTO comparison
+
+The macOS candidate accepts `--lto thin|fat`, with the measured ThinLTO
+baseline remaining the default. `--lto fat` is a separate experimental build:
+the pinned bootstrap applies whole-program LTO to the stage2 WASI compiler.
+All other source, patch, SDK, target-backend and sysroot constraints stay the
+same, and the exact setting is retained in the artifact's provenance. The
+underlying Cargo release profile already uses optimization level 3; simply
+changing `rust.optimize = true` to `3` would not introduce another optimization.
+No speedup is asserted until the resulting artifact passes the app's gates and
+a matched physical measurement.
