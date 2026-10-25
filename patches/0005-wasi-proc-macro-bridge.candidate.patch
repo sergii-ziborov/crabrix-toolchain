@@ -87,7 +87,7 @@ index 5b1249ed473..4442b9c479b 100644
 +    }
 +}
 diff --git a/compiler/rustc_codegen_ssa/src/back/link.rs b/compiler/rustc_codegen_ssa/src/back/link.rs
-index 8188aa0e81e..db89637d716 100644
+index 8188aa0e81e..ba7efa72c7c 100644
 --- a/compiler/rustc_codegen_ssa/src/back/link.rs
 +++ b/compiler/rustc_codegen_ssa/src/back/link.rs
 @@ -831,6 +831,14 @@ fn link_natively(
@@ -105,7 +105,7 @@ index 8188aa0e81e..db89637d716 100644
      let (linker_path, flavor) = linker_and_flavor(sess);
      let self_contained_components = self_contained_components(sess, crate_type, &linker_path);
  
-@@ -1209,6 +1217,51 @@ fn link_natively(
+@@ -1209,6 +1217,57 @@ fn link_natively(
      }
  }
  
@@ -123,7 +123,13 @@ index 8188aa0e81e..db89637d716 100644
 +        "__crabrix_pm_alloc", "__crabrix_pm_free", "__crabrix_pm_metadata",
 +        "__crabrix_pm_expand", "__wasm_call_ctors",
 +    ].iter().map(|name| name.to_string()).collect();
-+    options.exports.extend(info.exported_symbols[&CrateType::ProcMacro].iter().map(|(name, _)| name.clone()));
++    // The native dylib export list also contains rust_metadata_*; a WASI
++    // reactor stores that data in the .rustc custom section below, not in a
++    // separate metadata object. Only the declarations slice needs an address
++    // export for the versioned RPC loader.
++    options.exports.extend(info.exported_symbols[&CrateType::ProcMacro].iter()
++        .filter(|(name, _)| name.starts_with("__rustc_proc_macro_decls_"))
++        .map(|(name, _)| name.clone()));
 +    for module in &modules.modules {
 +        if let Some(path) = &module.object { options.inputs.push(path.clone()); }
 +    }
