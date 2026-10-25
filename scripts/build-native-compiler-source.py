@@ -105,10 +105,10 @@ def generate(artifact, archive, work, output):
         source, jumps = re.subn(r"\bgoto (\w+);", r"do { crabrix_native_checkpoint(); goto \1; } while (0);", source)
         checkpoints += jumps
         path.write_text('#include "native-checkpoint.h"\n' + source)
-    # Device code is compiled into the signed app. Simulator builds keep their
-    # VM backend and do not spend minutes compiling a second native kernel.
+    # Ordinary simulator builds keep their VM backend. A separate, explicit
+    # simulator candidate may compile this same source for its actual SDK.
     for path in output.glob("*.c"):
-        path.write_text('#include <TargetConditionals.h>\n#if !TARGET_OS_SIMULATOR\n' + path.read_text() + '\n#endif\n')
+        path.write_text('#include <TargetConditionals.h>\n#if !TARGET_OS_SIMULATOR || defined(CRABRIX_NATIVE_COMPILER_SIMULATOR)\n' + path.read_text() + '\n#endif\n')
     files = [{"path": path.name, "bytes": path.stat().st_size, "sha256": sha(path)} for path in sorted(output.iterdir()) if path.is_file()]
     report = {"schemaVersion": 1, "candidate": True, "productionReplacement": False,
         "compilerWASMSHA256": provenance["compilerSHA256"], "wabtArchiveSHA256": WABT_SHA,

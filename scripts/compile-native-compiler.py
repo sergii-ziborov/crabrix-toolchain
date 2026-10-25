@@ -5,6 +5,7 @@ import concurrent.futures
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import time
@@ -12,6 +13,13 @@ import time
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def validate_executable_abi(path):
+    symbols = subprocess.check_output(['xcrun', 'nm', '-gU', str(path)], text=True)
+    for name in ('create', 'run', 'export', 'source_sha256', 'memory', 'memory_size', 'remaining_work', 'reduce_work', 'free'):
+        if not re.search(r'\bT _crabrix_native_compiler_' + name + r'\s*$', symbols, re.MULTILINE):
+            raise ValueError('Native compiler object is missing executable ABI symbol: ' + name)
 
 
 def compile_sources(source, output, sdk, target, jobs):
@@ -29,6 +37,8 @@ def compile_sources(source, output, sdk, target, jobs):
     # Keep frame pointers, but omit unwind tables for these C objects only.
     flags = ['-target', target, '-isysroot', sdk_path, '-I', str(source)] + provenance['flags'] + [
         '-fno-unwind-tables', '-fno-asynchronous-unwind-tables']
+    if sdk == 'iphonesimulator':
+        flags.append('-DCRABRIX_NATIVE_COMPILER_SIMULATOR=1')
     identity = hashlib.sha256(json.dumps([provenance, flags, compiler_version], sort_keys=True).encode()).hexdigest()
     output.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
@@ -49,9 +59,13 @@ def compile_sources(source, output, sdk, target, jobs):
         print('Compiled ' + path.name, flush=True)
         return obj
 
-    paths = sorted(source.glob('*.c'))
+    # Check the tiny wrapper before spending time compiling the large kernel.
+    # In particular a simulator-excluded source must not produce a false archive.
+    wrapper = one(source / 'NativeCompiler.c')
+    validate_executable_abi(wrapper)
+    paths = sorted(path for path in source.glob('*.c') if path.name != 'NativeCompiler.c')
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as executor:
-        objects = list(executor.map(one, paths))
+        objects = [wrapper, *executor.map(one, paths)]
     archive = output / 'libCrabrixNativeCompiler.a'
     subprocess.run(['xcrun', '--sdk', sdk, 'libtool', '-static', '-o', str(archive), *map(str, objects)], check=True)
     record = {'schemaVersion': 1, 'candidate': True, 'productionReplacement': False,
@@ -67,10 +81,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--sdk', choices=['iphoneos', 'macosx'], required=True)
+    parser.add_argument('--sdk', choices=['iphoneos', 'iphonesimulator', 'macosx'], required=True)
     parser.add_argument('--target', required=True)
     parser.add_argument('--jobs', type=int, default=2, choices=range(1, 5))
     args = parser.parse_args()
-    if (args.sdk == 'iphoneos') != args.target.startswith('arm64-apple-ios'):
+    targets = {
+        'iphoneos': r'arm64-apple-ios\d+(?:\.\d+)*',
+        'iphonesimulator': r'arm64-apple-ios\d+(?:\.\d+)*-simulator',
+        'macosx': r'arm64-apple-macos(?:x)?\d+(?:\.\d+)*',
+    }
+    if not re.fullmatch(targets[args.sdk], args.target):
         parser.error('Target must match the actual selected platform SDK')
     compile_sources(args.source.resolve(), args.output.resolve(), args.sdk, args.target, args.jobs)

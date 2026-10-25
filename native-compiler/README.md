@@ -9,8 +9,10 @@ This directory is a candidate implementation. Generated provenance keeps `candid
 1. Obtain two independently built, matching WASM compiler/sysroot candidates from the approved `macos-wasi-rpc-fat-2026-10-25` recipe.
 2. Run `scripts/build-native-compiler-source.py` for each input, using the pinned official WABT archive. Fresh output directories are required.
 3. Run `scripts/package-native-compiler-source.py`. It checks every C/header hash and requires matching translations with distinct original Cloud build IDs.
-4. Run `scripts/compile-native-compiler.py --sdk iphoneos --target arm64-apple-ios18.0 --jobs 2`. Select the actual Xcode installation through `DEVELOPER_DIR`. The object inventory, Clang version, SDK, flags and final archive digest are retained. Host objects must never be relabelled as iOS objects.
+4. Run `scripts/compile-native-compiler.py --source /path/to/verified-native-source --output build/native-iphoneos --sdk iphoneos --target arm64-apple-ios18.0 --jobs 2`. Select the actual Xcode installation through `DEVELOPER_DIR`. The object inventory, Clang version, SDK, flags and final archive digest are retained. Host objects must never be relabelled as iOS objects.
 5. Run the real iPhone compiler, procedural macro, Stop, memory, responsiveness and offline WebKit gates before enabling a production app input. Measure cold dependencies separately from cache reuse.
+
+When a phone is unavailable, use `--sdk iphonesimulator --target arm64-apple-ios18.0-simulator` and a separate output directory for a simulator test library. Its object platform and executable ABI symbols are checked before linking. Simulator timings describe the host Mac and cannot satisfy the physical iPhone performance gate. The app enables this backend only in an explicit test build with Swift conditions `CRABRIX_NATIVE_COMPILER` and `CRABRIX_LEGACY_FIXTURES`, C definition `CRABRIX_NATIVE_COMPILER_SIMULATOR=1`, and `CRABRIX_NATIVE_COMPILER_CANDIDATE_LIBRARY` pointing to the verified library.
 
 All source files and notices are public build inputs. The app fetches neither this archive nor the static library while running. A build Mac may fetch pinned release assets before Xcode signs the final executable.
 
