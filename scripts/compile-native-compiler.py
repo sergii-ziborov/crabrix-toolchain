@@ -22,7 +22,21 @@ def validate_executable_abi(path):
             raise ValueError('Native compiler object is missing executable ABI symbol: ' + name)
 
 
-def compile_sources(source, output, sdk, target, jobs):
+def compilation_flags(source_flags, optimization_level=None):
+    """Keep the source recipe intact unless an explicit candidate experiment is requested."""
+    flags = list(source_flags)
+    if optimization_level is None:
+        return flags
+    if optimization_level != '2':
+        raise ValueError('Only the explicit O2 candidate experiment is supported')
+    optimization_indexes = [index for index, flag in enumerate(flags) if flag.startswith('-O')]
+    if len(optimization_indexes) != 1 or flags[optimization_indexes[0]] != '-O1':
+        raise ValueError('The O2 experiment requires exactly one original -O1 source flag')
+    flags[optimization_indexes[0]] = '-O2'
+    return flags
+
+
+def compile_sources(source, output, sdk, target, jobs, optimization_level=None):
     provenance = json.loads((source / 'native-source-provenance.json').read_text())
     for item in provenance['files']:
         path = source / item['path']
@@ -35,7 +49,7 @@ def compile_sources(source, output, sdk, target, jobs):
     # unwinding through generated guest frames is never part of this ABI.
     # Huge wasm2c functions exceed Apple's compact-unwind offset encoding.
     # Keep frame pointers, but omit unwind tables for these C objects only.
-    flags = ['-target', target, '-isysroot', sdk_path, '-I', str(source)] + provenance['flags'] + [
+    flags = ['-target', target, '-isysroot', sdk_path, '-I', str(source)] + compilation_flags(provenance['flags'], optimization_level) + [
         '-fno-unwind-tables', '-fno-asynchronous-unwind-tables']
     if sdk == 'iphonesimulator':
         flags.append('-DCRABRIX_NATIVE_COMPILER_SIMULATOR=1')
@@ -71,6 +85,7 @@ def compile_sources(source, output, sdk, target, jobs):
     record = {'schemaVersion': 1, 'candidate': True, 'productionReplacement': False,
               'compilerWASMSHA256': provenance['compilerWASMSHA256'], 'identity': identity,
               'sdk': sdk, 'sdkPath': sdk_path, 'target': target, 'clangVersion': compiler_version,
+              'optimizationOverride': optimization_level,
               'flags': flags, 'archiveSHA256': digest(archive), 'seconds': time.monotonic() - started,
               'objects': [{'path': path.name, 'sha256': digest(path)} for path in objects]}
     (output / 'native-compile-provenance.json').write_text(json.dumps(record, indent=2) + '\n')
@@ -84,6 +99,8 @@ if __name__ == '__main__':
     parser.add_argument('--sdk', choices=['iphoneos', 'iphonesimulator', 'macosx'], required=True)
     parser.add_argument('--target', required=True)
     parser.add_argument('--jobs', type=int, default=2, choices=range(1, 5))
+    parser.add_argument('--optimization-level', choices=['2'],
+                        help='Explicit O2 candidate experiment; the verified source recipe remains unchanged')
     args = parser.parse_args()
     targets = {
         'iphoneos': r'arm64-apple-ios\d+(?:\.\d+)*',
@@ -92,4 +109,4 @@ if __name__ == '__main__':
     }
     if not re.fullmatch(targets[args.sdk], args.target):
         parser.error('Target must match the actual selected platform SDK')
-    compile_sources(args.source.resolve(), args.output.resolve(), args.sdk, args.target, args.jobs)
+    compile_sources(args.source.resolve(), args.output.resolve(), args.sdk, args.target, args.jobs, args.optimization_level)
