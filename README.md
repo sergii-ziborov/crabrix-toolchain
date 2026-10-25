@@ -43,6 +43,26 @@ directories in the same pinned Linux amd64 image. Read its status before
 claiming byte-for-byte reproducibility. The current release keeps Wasm name
 and debug sections; a smaller stripped candidate remains an experiment.
 
+### Mac performance and procedural-macro qualification
+
+The manual Xcode Cloud experiments use a separate, pinned Mac recipe. They do
+not replace the release above merely because they compile or reproduce.
+[`release-profiles/macos-wasi-rpc-fat-2026-10-25.json`](release-profiles/macos-wasi-rpc-fat-2026-10-25.json)
+defines the exact source, bridge patch, fat-LTO flags, verified SDK and native
+intermediate LLVM for a future qualified release. Its Rust compiler remains
+WASI data interpreted on the phone; it is not downloaded native iOS code.
+
+`scripts/qualify-macos-release.py` requires two independent raw source builds
+with identical compiler, source-built sysroot ZIP and per-file inventory, plus
+the full Release app gates, an unchanged identity macro, Serde derive and the
+unchanged 32-package Kameo actor workload. The original experimental provenance
+is embedded verbatim in the new qualification record. Signing and public
+verification independently recheck the profile and consumer results. A source
+build marked as a candidate cannot be signed directly, and the existing Linux
+qualification path retains its original checks. The signed macro capability
+is emitted only for a successfully qualified profile. This section documents
+the preparation workflow; it does not claim that the new compiler has shipped.
+
 ## Build inputs and commands
 
 [`toolchain.lock.json`](toolchain.lock.json) pins the builder and Rust commits,

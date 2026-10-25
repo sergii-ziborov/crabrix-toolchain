@@ -1,0 +1,70 @@
+{
+  "basePatchDigests": [
+    {
+      "path": "patches/0001-integer-lowering.patch",
+      "sha256": "82f5d2dc47cb628475efcadda4db7ec738479f51039ab07882da9deddc234c2f"
+    },
+    {
+      "path": "patches/0002-mulhi.patch",
+      "sha256": "26beac138118262d2058f58bfce3fd421f208d20afdb506055c841ff2e3f779d"
+    },
+    {
+      "path": "patches/0003-icmp-imm-i128.patch",
+      "sha256": "091117dc3a1355d5f6c05cff34d9b4ceccaa6fb23e1dc26847012d3cdf4e694a"
+    },
+    {
+      "path": "patches/0004-wasm32-i128-libcall-abi.patch",
+      "sha256": "a3cf72f17ca06cb58e683b3c54db632057017100e9079f4c4f4f71e8094e5eff"
+    }
+  ],
+  "bridgePatchSHA256": "a4e2f45cbbb83e81cb5e8932286b713d72a1facfef877daa35f8a45833ae425d",
+  "capabilities": [
+    "proc-macro-rpc-v1"
+  ],
+  "configSourceSHA256": "0c5a1993f61a29efbca1aa3241c7e51f0108fe63333629d1716c48dc98566454",
+  "id": "macos-wasi-rpc-fat-2026-10-25",
+  "nativeLLVM": {
+    "llvmConfigSHA256": "0695ca66d25392c10cc882dcee9414ff5378035fdfb41890927312ed7d7be642",
+    "role": "intermediate Darwin compiler only; not bundled into WASI candidate",
+    "version": "22.1.8"
+  },
+  "recipeCommit": "a9f1f6cb0154554645a9341ac9f0b0a20015db1e",
+  "requiredAdditionalGates": [
+    "proc-macro-identity",
+    "serde-derive",
+    "kameo-actors"
+  ],
+  "rustRevision": "abc48c0b8aba37d3f3862a9d5c76eb4e78f90e88",
+  "rustVersion": "1.96.0-dev",
+  "schemaVersion": 1,
+  "sdk": {
+    "sha256": "383be7fe00ae04691e1859164fd99970a528c55d624b886ed59f7933898b933d",
+    "url": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-32/wasi-sdk-32.0-arm64-macos.tar.gz"
+  },
+  "settings": {
+    "build.build": "\"aarch64-apple-darwin\"",
+    "build.extended": "false",
+    "build.host": "[\"wasm32-wasip1\"]",
+    "build.submodules": "false",
+    "build.target": "[\"wasm32-wasip1\"]",
+    "build.vendor": "false",
+    "llvm.download-ci-llvm": "false",
+    "llvm.link-shared": "true",
+    "rust.codegen-backends": "[\"llvm\",\"cranelift\"]",
+    "rust.debug-assertions": "false",
+    "rust.debug-assertions-std": "false",
+    "rust.debug-assertions-tools": "false",
+    "rust.debug-logging": "false",
+    "rust.download-rustc": "false",
+    "rust.frame-pointers": "false",
+    "rust.incremental": "false",
+    "rust.lto": "fat",
+    "rust.optimize": "true",
+    "target.aarch64-apple-darwin.codegen-backends": "[\"llvm\"]",
+    "target.wasm32-wasip1.codegen-backends": "[\"cranelift\"]",
+    "target.wasm32-wasip1.rustflags": "[\"-Clink-arg=-Wl,--export-if-defined=__crabrix_pm_alloc\", \"-Clink-arg=-Wl,--export-if-defined=__crabrix_pm_free\", \"-Clink-arg=-Wl,--export-if-defined=__crabrix_pm_dispatch\"]"
+  },
+  "sourceLockSHA256": "7c44029b80757b80fe5bfb54614bc09e967917506bc28a275dc694eb404bf97a",
+  "stage0ManifestSHA256": "9aa08fe0e0935ef42449eb244f438c5697dbb076091f5168c004b115fdaf781d",
+  "sysrootFileCount": 60
+}

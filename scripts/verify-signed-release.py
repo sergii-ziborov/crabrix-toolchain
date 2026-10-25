@@ -91,13 +91,23 @@ def verify(directory, keyring):
         raise ValueError("signed sysroot manifest digest differs from the inventory")
     lock = unique_json((directory / "toolchain.lock.json").read_bytes())
     provenance = unique_json((directory / "toolchain-provenance.json").read_bytes())
-    if provenance.get("candidate") is not False or \
+    if provenance.get("buildProfile") is not None:
+        import qualified_macos
+        qualified_macos.check(directory, directory / "toolchain.lock.json")
+        if payload.get("capabilities") != qualified_macos.profile()["capabilities"] or \
+                provenance.get("builderSourceCommit") != payload["builderSourceCommit"] or \
+                provenance.get("sourceLockSHA256") != payload["sourceLockSHA256"] or \
+                provenance.get("rustVersion") != payload.get("rustVersion"):
+            raise ValueError("signed Mac profile identity or capabilities differ")
+    elif provenance.get("candidate") is not False or \
             provenance.get("builderWorkingTreeDirty") is not False or \
             provenance.get("builderSourceCommit") != payload["builderSourceCommit"] or \
             provenance.get("sourceLockSHA256") != payload["sourceLockSHA256"] or \
             provenance.get("rustVersion") != payload.get("rustVersion") or \
             provenance.get("rustRevision") != lock["rust"]["revision"]:
         raise ValueError("signed release provenance is inconsistent")
+    elif payload.get("capabilities"):
+        raise ValueError("legacy Linux release has no qualified macro capability")
     sums = (directory / "SHA256SUMS").read_text().splitlines()
     expected_names = sorted([*recorded, "toolchain.descriptor.json"])
     if {item.name for item in directory.iterdir()} != set(expected_names) | {"SHA256SUMS"}:

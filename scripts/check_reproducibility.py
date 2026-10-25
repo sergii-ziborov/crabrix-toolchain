@@ -24,6 +24,9 @@ def check(directory, lock_path):
     report = json.loads((directory / "reproducibility-results.json").read_text())
     lock = json.loads(lock_path.read_text())
     provenance = json.loads((directory / "toolchain-provenance.json").read_text())
+    if provenance.get("buildProfile") is not None:
+        import qualified_macos
+        return qualified_macos.check(directory, lock_path)
     if report.get("schemaVersion") != 1 or report.get("sourceLockSHA256") != digest(lock_path) or \
             report.get("builderImageDigest") != lock["buildEnvironment"]["imageDigest"] or \
             report.get("outputTarget") != "wasm32-wasip1" or \
