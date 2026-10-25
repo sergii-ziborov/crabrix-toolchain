@@ -1,3 +1,296 @@
+diff --git a/compiler/rustc_codegen_cranelift/clif2wasm/examples/atomic_memory_fixture.rs b/compiler/rustc_codegen_cranelift/clif2wasm/examples/atomic_memory_fixture.rs
+new file mode 100644
+index 00000000000..990d14b3449
+--- /dev/null
++++ b/compiler/rustc_codegen_cranelift/clif2wasm/examples/atomic_memory_fixture.rs
+@@ -0,0 +1,103 @@
++//! Emit real backend output for tests/atomic_memory.py (no runtime dependency).
++use clif2wasm::{NamedClifFunc, translate_module_multi};
++use cranelift_codegen::{
++    ir::{self, AbiParam, AtomicRmwOp, InstBuilder, MemFlags, Signature, UserFuncName, types},
++    isa::CallConv,
++};
++use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
++
++fn function(ty: ir::Type, op: &str) -> ir::Function {
++    let mut sig = Signature::new(CallConv::SystemV);
++    sig.params.push(AbiParam::new(types::I32));
++    if op != "load" {
++        sig.params.push(AbiParam::new(ty));
++    }
++    if op == "cas" {
++        sig.params.push(AbiParam::new(ty));
++    }
++    if op != "store" {
++        sig.returns.push(AbiParam::new(ty));
++    }
++    let mut func = ir::Function::with_name_signature(UserFuncName::user(0, 0), sig);
++    let mut ctx = FunctionBuilderContext::new();
++    let mut b = FunctionBuilder::new(&mut func, &mut ctx);
++    let entry = b.create_block();
++    b.append_block_params_for_function_params(entry);
++    b.switch_to_block(entry);
++    let p = b.block_params(entry).to_vec();
++    let flags = MemFlags::trusted();
++    let result = match op {
++        "load" => Some(b.ins().atomic_load(ty, flags, p[0])),
++        "store" => {
++            b.ins().atomic_store(flags, p[1], p[0]);
++            None
++        }
++        "cas" => Some(b.ins().atomic_cas(flags, p[0], p[1], p[2])),
++        _ => {
++            let rmw = match op {
++                "add" => AtomicRmwOp::Add,
++                "sub" => AtomicRmwOp::Sub,
++                "and" => AtomicRmwOp::And,
++                "or" => AtomicRmwOp::Or,
++                "xor" => AtomicRmwOp::Xor,
++                "xchg" => AtomicRmwOp::Xchg,
++                "nand" => AtomicRmwOp::Nand,
++                "umin" => AtomicRmwOp::Umin,
++                "umax" => AtomicRmwOp::Umax,
++                "smin" => AtomicRmwOp::Smin,
++                "smax" => AtomicRmwOp::Smax,
++                _ => unreachable!(),
++            };
++            Some(b.ins().atomic_rmw(ty, flags, rmw, p[0], p[1]))
++        }
++    };
++    b.ins().return_(&result.into_iter().collect::<Vec<_>>());
++    b.seal_all_blocks();
++    b.finalize();
++    func
++}
++
++fn main() -> anyhow::Result<()> {
++    let mut functions = Vec::new();
++    let operations = [
++        "load", "store", "cas", "add", "sub", "and", "or", "xor", "xchg", "nand", "umin", "umax",
++        "smin", "smax",
++    ];
++    for (bits, ty) in [(8, types::I8), (16, types::I16), (32, types::I32), (64, types::I64)] {
++        for op in operations {
++            functions.push((format!("{op}{bits}"), function(ty, op)));
++        }
++    }
++    // Ordinary loads/stores provide an independent view of all neighboring bytes.
++    for (name, store) in [("peek", false), ("poke", true)] {
++        let mut sig = Signature::new(CallConv::SystemV);
++        sig.params.push(AbiParam::new(types::I32));
++        if store {
++            sig.params.push(AbiParam::new(types::I64));
++        } else {
++            sig.returns.push(AbiParam::new(types::I64));
++        }
++        let mut f = ir::Function::with_name_signature(UserFuncName::user(0, 0), sig);
++        let mut ctx = FunctionBuilderContext::new();
++        let mut b = FunctionBuilder::new(&mut f, &mut ctx);
++        let block = b.create_block();
++        b.append_block_params_for_function_params(block);
++        b.switch_to_block(block);
++        let p = b.block_params(block).to_vec();
++        if store {
++            b.ins().store(MemFlags::trusted(), p[1], p[0], 0);
++            b.ins().return_(&[]);
++        } else {
++            let v = b.ins().load(types::I64, MemFlags::trusted(), p[0], 0);
++            b.ins().return_(&[v]);
++        }
++        b.seal_all_blocks();
++        b.finalize();
++        functions.push((name.into(), f));
++    }
++    let named: Vec<_> = functions.iter().map(|(name, f)| NamedClifFunc::new(name, f)).collect();
++    let exports: Vec<_> = functions.iter().map(|(name, _)| name.as_str()).collect();
++    let wasm = translate_module_multi(&named, &[], &exports)?;
++    std::fs::write(std::env::args().nth(1).expect("output .wasm path"), wasm)?;
++    Ok(())
++}
+diff --git a/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs b/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs
+index f0cb3c9a01f..82c8f7207ab 100644
+--- a/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs
++++ b/compiler/rustc_codegen_cranelift/clif2wasm/src/ops.rs
+@@ -600,11 +600,7 @@ pub fn lower_inst(
+             let result = dfg.first_result(inst);
+             let wty = map_type(dfg.value_type(result))?;
+             let memory = mem_arg(cx, 0i32.into())?;
+-            let op = match wty {
+-                Type::I32 => Operator::I32Load { memory },
+-                Type::I64 => Operator::I64Load { memory },
+-                other => bail!("atomic_load of {other} unimplemented"),
+-            };
++            let (op, _) = atomic_memory_ops(dfg.value_type(result), memory)?;
+             let wv = body.add_op(wb, op, &[addr], &[wty]);
+             cx.bind1(result, wv);
+         }
+@@ -613,11 +609,7 @@ pub fn lower_inst(
+             let value = cx.one(args[0])?;
+             let addr = lower_addr(cx, args[1])?;
+             let memory = mem_arg(cx, 0i32.into())?;
+-            let op = match map_type(cx.vty(args[0]))? {
+-                Type::I32 => Operator::I32Store { memory },
+-                Type::I64 => Operator::I64Store { memory },
+-                other => bail!("atomic_store of {other} unimplemented"),
+-            };
++            let (_, op) = atomic_memory_ops(cx.vty(args[0]), memory)?;
+             body.add_op(wb, op, &[addr, value], &[]);
+         }
+         InstructionData::AtomicRmw { opcode: Opcode::AtomicRmw, args, op: rmw_op, .. } => {
+@@ -626,15 +618,12 @@ pub fn lower_inst(
+             let addr = lower_addr(cx, args[0])?;
+             let operand = cx.one(args[1])?;
+             let result = dfg.first_result(inst);
+-            let wty = map_type(dfg.value_type(result))?;
++            let clif_ty = dfg.value_type(result);
++            let wty = map_type(clif_ty)?;
+             let is64 = wty == Type::I64;
+             ensure!(matches!(wty, Type::I32 | Type::I64), "atomic_rmw of {wty} unimplemented");
+             let memory = mem_arg(cx, 0i32.into())?;
+-            let (load_op, store_op) = if is64 {
+-                (Operator::I64Load { memory }, Operator::I64Store { memory })
+-            } else {
+-                (Operator::I32Load { memory }, Operator::I32Store { memory })
+-            };
++            let (load_op, store_op) = atomic_memory_ops(clif_ty, memory)?;
+             let old = body.add_op(wb, load_op, &[addr], &[wty]);
+             let pick = |a: Operator, b: Operator| if is64 { b } else { a };
+             let new = match rmw_op {
+@@ -665,7 +654,15 @@ pub fn lower_inst(
+                         (AtomicRmwOp::Smax, true) => Operator::I64GtS,
+                         _ => unreachable!(),
+                     };
+-                    let c = body.add_op(wb, cmp_op, &[old, operand], &[Type::I32]);
++                    let narrow_signed = matches!(rmw_op, AtomicRmwOp::Smin | AtomicRmwOp::Smax)
++                        && matches!(clif_ty, types::I8 | types::I16);
++                    let (cmp_old, cmp_operand) = if narrow_signed {
++                        (sign_extend_narrow(body, wb, old, clif_ty),
++                         sign_extend_narrow(body, wb, operand, clif_ty))
++                    } else {
++                        (old, operand)
++                    };
++                    let c = body.add_op(wb, cmp_op, &[cmp_old, cmp_operand], &[Type::I32]);
+                     body.add_op(wb, Operator::Select, &[old, operand, c], &[wty])
+                 }
+             };
+@@ -684,11 +681,8 @@ pub fn lower_inst(
+             let is64 = wty == Type::I64;
+             ensure!(matches!(wty, Type::I32 | Type::I64), "atomic_cas of {wty} unimplemented");
+             let memory = mem_arg(cx, 0i32.into())?;
+-            let (load_op, store_op, eq_op) = if is64 {
+-                (Operator::I64Load { memory }, Operator::I64Store { memory }, Operator::I64Eq)
+-            } else {
+-                (Operator::I32Load { memory }, Operator::I32Store { memory }, Operator::I32Eq)
+-            };
++            let (load_op, store_op) = atomic_memory_ops(dfg.value_type(result), memory)?;
++            let eq_op = if is64 { Operator::I64Eq } else { Operator::I32Eq };
+             let old = body.add_op(wb, load_op, &[addr], &[wty]);
+             let eq = body.add_op(wb, eq_op, &[old, expected], &[Type::I32]);
+             let new = body.add_op(wb, Operator::Select, &[replacement, old, eq], &[wty]);
+@@ -1496,6 +1490,18 @@ fn lower_addr(cx: &FnCx, addr: ir::Value) -> Result<waffle::Value> {
+     cx.one(addr)
+ }
+ 
++/// Narrow CLIF integers use i32 locals, but must retain their actual memory
++/// width. Widening an AtomicBool/i8/i16 access reads or corrupts adjacent fields.
++fn atomic_memory_ops(ty: ir::Type, memory: MemoryArg) -> Result<(Operator, Operator)> {
++    Ok(match ty {
++        types::I8 => (Operator::I32Load8U { memory }, Operator::I32Store8 { memory }),
++        types::I16 => (Operator::I32Load16U { memory }, Operator::I32Store16 { memory }),
++        types::I32 => (Operator::I32Load { memory }, Operator::I32Store { memory }),
++        types::I64 => (Operator::I64Load { memory }, Operator::I64Store { memory }),
++        other => bail!("atomic memory access of {other} unimplemented"),
++    })
++}
++
+ fn mem_arg(cx: &FnCx, offset: ir::immediates::Offset32) -> Result<MemoryArg> {
+     let off: i32 = offset.into();
+     ensure!(off >= 0, "negative load/store offset {off} is unsupported (wasm offsets are unsigned)");
+diff --git a/compiler/rustc_codegen_cranelift/clif2wasm/tests/atomic_memory.py b/compiler/rustc_codegen_cranelift/clif2wasm/tests/atomic_memory.py
+new file mode 100644
+index 00000000000..c26bf82beeb
+--- /dev/null
++++ b/compiler/rustc_codegen_cranelift/clif2wasm/tests/atomic_memory.py
+@@ -0,0 +1,79 @@
++#!/usr/bin/env python3
++"""Execute atomic_memory_fixture.wasm with Wasmtime; pip install wasmtime first.
++
++Generate with cargo run --example atomic_memory_fixture -- /tmp/atomics.wasm,
++then python3 tests/atomic_memory.py /tmp/atomics.wasm. Tests real generated code,
++including adjacent nonzero fields and signed narrow RMW comparisons.
++"""
++import sys
++import wasmtime
++
++engine = wasmtime.Engine()
++store = wasmtime.Store(engine)
++exports = wasmtime.Instance(store, wasmtime.Module.from_file(engine, sys.argv[1]), []).exports(store)
++checks = 0
++
++
++def call(name, *args):
++    return exports[name](store, *args)
++
++
++def signed(value, bits):
++    return value - (1 << bits) if value & (1 << (bits - 1)) else value
++
++
++def canonical(value, bits):
++    return value & ((1 << bits) - 1) if bits >= 32 else value
++
++
++def argument(value, bits):
++    return signed(value, bits) if bits >= 32 else value
++
++
++for bits in (8, 16, 32, 64):
++    mask = (1 << bits) - 1
++    # Both canaries are nonzero. Testing an isolated zero-filled slot misses
++    # accidental widening of i8/i16 operations to i32.
++    offset = {8: 1, 16: 2, 32: 0, 64: 0}[bits]
++    address = 128 + offset
++    shift = offset * 8
++    for old in (0, 1, mask, 1 << (bits - 1), mask - 2):
++        before = (0xA55A96C3F0E1874B & ~(mask << shift)) | (old << shift)
++
++        def reset():
++            call("poke", 128, signed(before, 64))
++
++        def verify(value):
++            global checks
++            expected = (before & ~(mask << shift)) | ((value & mask) << shift)
++            actual = call("peek", 128) & ((1 << 64) - 1)
++            assert actual == expected, (bits, old, actual, expected)
++            checks += 1
++
++        reset()
++        actual = canonical(call(f"load{bits}", address), bits)
++        assert actual == old, ("load", bits, old, actual)
++        verify(old)
++        for operand in (0, 1, mask, 1 << (bits - 1), (1 << (bits - 1)) - 1):
++            reset()
++            call(f"store{bits}", address, argument(operand, bits))
++            verify(operand)
++            for expected in (old, old ^ 1):
++                reset()
++                actual = canonical(call(f"cas{bits}", address, argument(expected, bits), argument(operand, bits)), bits)
++                assert actual == old, ("cas", bits, old, actual)
++                verify(operand if expected == old else old)
++            operations = {
++                "add": old + operand, "sub": old - operand,
++                "and": old & operand, "or": old | operand,
++                "xor": old ^ operand, "xchg": operand,
++                "nand": ~(old & operand), "umin": min(old, operand), "umax": max(old, operand),
++                "smin": old if signed(old, bits) < signed(operand, bits) else operand,
++                "smax": old if signed(old, bits) > signed(operand, bits) else operand,
++            }
++            for op, expected in operations.items():
++                reset()
++                actual = canonical(call(f"{op}{bits}", address, argument(operand, bits)), bits)
++                assert actual == old, (op, bits, old, actual)
++                verify(expected)
++print(f"PASS: {checks} atomic memory/canary checks across i8/i16/i32/i64")
 diff --git a/compiler/rustc_codegen_cranelift/riwl/src/link.rs b/compiler/rustc_codegen_cranelift/riwl/src/link.rs
 index 5b1249ed473..4442b9c479b 100644
 --- a/compiler/rustc_codegen_cranelift/riwl/src/link.rs

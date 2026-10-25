@@ -63,6 +63,15 @@ qualification path retains its original checks. The signed macro capability
 is emitted only for a successfully qualified profile. This section documents
 the preparation workflow; it does not claim that the new compiler has shipped.
 
+The current candidate patch also corrects CLIF i8/i16 atomic memory widths and
+signed narrow min/max comparisons. The prior backend fails a load beside nonzero
+canary bytes; the corrected backend passes 1,420 executed Wasmtime checks across
+8-, 16-, 32- and 64-bit loads, stores, compare/exchange and RMW operations. The
+patch includes `clif2wasm/examples/atomic_memory_fixture.rs` and
+`clif2wasm/tests/atomic_memory.py` to reproduce this check. Full compiler and
+unchanged Kameo acceptance are still required after rebuilding. These backend
+checks alone do not qualify a release or establish a device timing.
+
 ## Build inputs and commands
 
 [`toolchain.lock.json`](toolchain.lock.json) pins the builder and Rust commits,
