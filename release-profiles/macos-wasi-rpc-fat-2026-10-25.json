@@ -17,7 +17,7 @@
       "sha256": "a3cf72f17ca06cb58e683b3c54db632057017100e9079f4c4f4f71e8094e5eff"
     }
   ],
-  "bridgePatchSHA256": "03fca8b11bfc2c93c2b2d734c664344b007fc92e16c62c8164515a4bf20460e9",
+  "bridgePatchSHA256": "d9c4c8338b80f7be288a7aab575a021fceb424fdaf9711469f60265655f6d011",
   "capabilities": [
     "proc-macro-rpc-v1"
   ],
@@ -28,11 +28,12 @@
     "role": "intermediate Darwin compiler only; not bundled into WASI candidate",
     "version": "22.1.8"
   },
-  "recipeCommit": "1bd3efbdb0ea8f42c0dc778fa7878d2461acebb2",
+  "recipeCommit": "0a5970c97ef0e192c8f6e5dec460190924489f97",
   "requiredAdditionalGates": [
     "proc-macro-identity",
     "serde-derive",
-    "kameo-actors"
+    "kameo-actors",
+    "atomic-widths"
   ],
   "rustRevision": "abc48c0b8aba37d3f3862a9d5c76eb4e78f90e88",
   "rustVersion": "1.96.0-dev",
