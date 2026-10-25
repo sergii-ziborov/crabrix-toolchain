@@ -46,6 +46,59 @@ def run(command, *, cwd=None, env=None, timeout=1200):
     subprocess.run(command, cwd=cwd, env=env, check=True, timeout=timeout)
 
 
+def export_candidate_sysroot(source, output, arch):
+    """Keep this build's public WASI libraries, including the macro API.
+
+    Only stage1's source-built cross libraries are eligible. Never substitute
+    the downloaded stage0 sysroot or an older release for a missing output.
+    """
+    import package_toolchain
+    triple = {"arm64": "aarch64-apple-darwin", "x86_64": "x86_64-apple-darwin"}[arch]
+    library = source / "build" / triple / "stage1/lib/rustlib/wasm32-wasip1/lib"
+    if not library.is_dir() or library.is_symlink():
+        raise ValueError("source-built stage1 WASI sysroot is missing")
+    crates = package_toolchain.CRATES | {"proc_macro", "rustc_literal_escaper"}
+    files = {}
+    for path in sorted(library.rglob("*")):
+        if path.is_symlink():
+            raise ValueError("candidate sysroot contains a symlink")
+        if not path.is_file():
+            continue
+        if path.parent == library:
+            if not path.name.startswith("lib") or not path.name.endswith((".rlib", ".rmeta")):
+                continue
+            if path.name[3:].split("-", 1)[0] not in crates:
+                continue
+        elif path.parent == library / "self-contained":
+            if path.name not in {"libc.a", "crt1-command.o", "crt1-reactor.o"}:
+                continue
+        else:
+            continue
+        files["lib/rustlib/wasm32-wasip1/lib/" + path.relative_to(library).as_posix()] = path
+    for crate in ("std", "proc_macro", "rustc_literal_escaper"):
+        if not any(path.name.startswith("lib" + crate + "-") and path.suffix == ".rlib" for path in files.values()):
+            raise ValueError(f"source-built {crate} rlib is missing")
+    for name in ("libc.a", "crt1-command.o"):
+        if "lib/rustlib/wasm32-wasip1/lib/self-contained/" + name not in files:
+            raise ValueError(f"source-built WASI {name} is missing")
+    archive = output / "sysroot-wasip1.zip"
+    inventory = {"schemaVersion": 1, "files": package_toolchain.write_sysroot_archive(files, archive)}
+    inventory_path = output / "sysroot-files.json"
+    inventory_path.write_text(json.dumps(inventory, indent=2) + "\n")
+    (output / "sysroot-wasip1.sha256").write_text(digest(archive))
+    # Folder resources allow the local compiler gates to inspect every input
+    # without a production-signature bypass or a test-only archive extractor.
+    folder = output / "sysroot-wasip1"
+    folder.mkdir()
+    for name, path in files.items():
+        destination = folder / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, destination)
+    (folder / "manifest.json").write_text(json.dumps({"files": sorted(files)}, sort_keys=True, separators=(",", ":")) + "\n")
+    return {"archiveSHA256": digest(archive), "inventorySHA256": digest(inventory_path),
+            "sourceStage": str(library.relative_to(source)), "fileCount": len(inventory["files"])}
+
+
 def compile_with_heartbeat(command, source, environment, log):
     started = time.monotonic()
     with log.open("w") as output:
@@ -229,6 +282,14 @@ def main():
                       stage0ManifestSHA256=digest(source / "src/stage0"),
                       cloudBuildID=os.environ.get("CI_BUILD_ID"),
                       host=platform.platform())
+    if args.proc_macro_bridge:
+        try:
+            provenance["candidateSysroot"] = export_candidate_sysroot(source, output, arch)
+        except (OSError, ValueError) as error:
+            # Preserve the compiled experiment even if optional library capture
+            # fails. Consumers must explicitly require a complete inventory.
+            provenance["candidateSysrootExportError"] = str(error)
+            print("Candidate sysroot capture unavailable:", error, flush=True)
     (output / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
     (output / "CANDIDATE-NOT-FOR-RELEASE.txt").write_text("Compiler-only performance experiment. Not signed production data.\n")
     print("Candidate built:", provenance["compilerSHA256"], provenance["compilerBytes"], flush=True)
