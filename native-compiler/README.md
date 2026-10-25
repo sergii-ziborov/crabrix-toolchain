@@ -29,6 +29,14 @@ O2 and entry-stack experiments, but neither established a performance advantage
 over its matching original-kernel control on the shared Mac. The original
 guarded O1 kernel is retained. Sub-30-second simulator samples are not physical
 iPhone measurements. [Exact measurements and scope](https://github.com/sergii-ziborov/Crabrix/blob/codex/compiler-speed-20261024/docs/performance/2026-10-26-native-entry-stack-simulator.json).
+
+The selected original guarded O1 kernel also completed a real `iphoneos` SDK
+build for `arm64-apple-ios18.0`: native library SHA-256
+`55cee47f66a399abf2988e621ad9576456edac0d9c4fe887d220666ba145159e`, package
+SHA-256 `fbb271acfbbafbbe5bdb1841e798d929b953c0339f4d04db07cac5aea29999a1`.
+The package retains the verified source archive and original build provenance
+and remains a candidate. Device execution, production promotion and signing
+have not been claimed by this cross-build.
 - Clang rejects frames above 128 KiB. A 512 KiB margin protects the next stack prologue; a separate 4,096-call depth limit remains enabled.
 - Native C objects retain frame pointers but omit unwind tables: all traps use the guarded C ABI, and very large generated functions exceed Apple's compact-unwind offset encoding. Swift and Objective-C app objects retain their ordinary unwind metadata.
 - Every native exported operation installs its own C trap frame, including reentrant procedural macro dispatch. Swift callbacks report errors by returning. No `longjmp` crosses Swift frames.

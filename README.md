@@ -49,8 +49,10 @@ The manual Xcode Cloud experiments use a separate, pinned Mac recipe. They do
 not replace the release above merely because they compile or reproduce.
 [`release-profiles/macos-wasi-rpc-fat-2026-10-25.json`](release-profiles/macos-wasi-rpc-fat-2026-10-25.json)
 defines the exact source, bridge patch, fat-LTO flags, verified SDK and native
-intermediate LLVM for a future qualified release. Its Rust compiler remains
-WASI data interpreted on the phone; it is not downloaded native iOS code.
+intermediate LLVM for a future qualified release. The default release interprets
+compiler WASI data. A separate native translation of that fixed compiler can be
+statically built into the signed app; downloaded projects and macro crates remain
+WASM guests, and no native iOS code is downloaded to the phone.
 
 `scripts/qualify-macos-release.py` requires two independent raw source builds
 with identical compiler, source-built sysroot ZIP and per-file inventory, plus
@@ -68,8 +70,9 @@ signed narrow min/max comparisons. The prior backend fails a load beside nonzero
 canary bytes; the corrected backend passes 1,420 executed Wasmtime checks across
 8-, 16-, 32- and 64-bit loads, stores, compare/exchange and RMW operations. The
 patch includes `clif2wasm/examples/atomic_memory_fixture.rs` and
-`clif2wasm/tests/atomic_memory.py` to reproduce this check. Full compiler and
-unchanged Kameo acceptance are still required after rebuilding. These backend
+`clif2wasm/tests/atomic_memory.py` to reproduce this check. The rebuilt full
+compiler subsequently passed unchanged Kameo acceptance on the simulator as
+recorded below; real-device qualification remains outstanding. The backend
 checks alone do not qualify a release or establish a device timing.
 
 An optional native-generation experiment, `--checkpoint-policy
@@ -81,6 +84,18 @@ tests verify that infinite loops and recursion still exhaust the budget. On the
 is a code-generation count, not a measured runtime speedup. The original
 all-branches output was also compared byte for byte across that corpus. New
 performance and Stop gates are required before selecting the experiment.
+
+The corrected compiler `27acccf94e1f4083b311b352164fe1a310077c76f4cd3e221a2ee26b02309008`
+has now passed ten native simulator gates, including real macros, the unchanged
+31-dependency Kameo workload, Axum, Stop and UI responsiveness. Its generated C
+retains 188,148 function/backedge checkpoints and full stack probes. Cold Kameo
+observations on the shared Mac range from 19.480 to 40.436 seconds. Later O2 and
+function-entry stack-probe experiments passed functional tests but did not
+establish an advantage over matching controls, so the original guarded O1 kernel
+is retained. A separate real `iphoneos` arm64 static archive also built successfully.
+These are candidate artifacts, not shipping compiler inputs or physical-iPhone
+performance claims. [Native workflow](native-compiler/README.md) and
+[exact iOS artifact record](https://github.com/sergii-ziborov/Crabrix/blob/codex/compiler-speed-20261024/docs/performance/2026-10-26-native-iphoneos-candidate.json).
 
 ## Build inputs and commands
 
