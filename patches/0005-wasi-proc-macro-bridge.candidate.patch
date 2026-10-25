@@ -1,5 +1,5 @@
 diff --git a/compiler/rustc_codegen_cranelift/riwl/src/link.rs b/compiler/rustc_codegen_cranelift/riwl/src/link.rs
-index 5b1249ed473..085944e51dc 100644
+index 5b1249ed473..4442b9c479b 100644
 --- a/compiler/rustc_codegen_cranelift/riwl/src/link.rs
 +++ b/compiler/rustc_codegen_cranelift/riwl/src/link.rs
 @@ -563,6 +563,7 @@ fn add_object_symbols(
@@ -10,7 +10,21 @@ index 5b1249ed473..085944e51dc 100644
      {
          let mut exported = std::collections::HashSet::new();
          if !opts.no_entry {
-@@ -590,6 +591,12 @@ fn add_object_symbols(
+@@ -581,6 +582,13 @@ fn add_object_symbols(
+             if exported.contains(name) {
+                 continue;
+             }
++            // This function is synthesized by the linker, so it has no input
++            // object symbol. Reactors explicitly export it for host startup.
++            if name == "__wasm_call_ctors" && ctors_index < next {
++                export_list.push((name.clone(), 0x00, ctors_index));
++                exported.insert(name.clone());
++                continue;
++            }
+             let Some(&(dpos, dsi)) = global.get(name) else {
+                 bail!("--export {name}: symbol not defined");
+             };
+@@ -590,6 +598,12 @@ fn add_object_symbols(
                      let t = Target::Func(dpos, *local_index);
                      export_list.push((name.clone(), 0x00, out_func_index(&t)?));
                  }
@@ -23,7 +37,7 @@ index 5b1249ed473..085944e51dc 100644
                  other => bail!("--export {name}: unsupported symbol kind {other:?}"),
              }
              exported.insert(name.clone());
-@@ -684,7 +691,7 @@ fn add_object_symbols(
+@@ -684,7 +698,7 @@ fn add_object_symbols(
  
      // globals: __stack_pointer + synthetics (__memory_base/__table_base/__tls_*)
      let mut p = Vec::new();
@@ -32,7 +46,7 @@ index 5b1249ed473..085944e51dc 100644
      p.push(0x7f);
      p.push(0x01); // i32 mutable
      p.push(0x41); // i32.const
-@@ -697,6 +704,11 @@ fn add_object_symbols(
+@@ -697,6 +711,11 @@ fn add_object_symbols(
          sleb(&mut p, value as i64);
          p.push(0x0b);
      }
@@ -44,6 +58,34 @@ index 5b1249ed473..085944e51dc 100644
      e.section(6, &p);
  
      // export (resolved earlier, before the mutable patch pass)
+@@ -833,3 +852,27 @@ fn apply_patch(buf: &mut [u8], off: usize, val: PatchVal) -> Result<()> {
+     }
+     Ok(())
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::{link, LinkOptions};
++
++    #[test]
++    fn reactor_can_export_synthesized_ctors_without_an_input_symbol() {
++        let mut options = LinkOptions::default();
++        options.no_entry = true;
++        options.exports = vec!["__wasm_call_ctors".into()];
++        let bytes = link(&options).unwrap();
++        wasmparser::Validator::new().validate_all(&bytes).unwrap();
++        let exports: Vec<_> = wasmparser::Parser::new(0).parse_all(&bytes)
++            .filter_map(|payload| match payload.unwrap() {
++                wasmparser::Payload::ExportSection(exports) => Some(exports),
++                _ => None,
++            })
++            .flat_map(|exports| exports.into_iter().map(Result::unwrap))
++            .filter(|export| export.name == "__wasm_call_ctors")
++            .collect();
++        assert_eq!(exports.len(), 1);
++        assert_eq!(exports[0].kind, wasmparser::ExternalKind::Func);
++    }
++}
 diff --git a/compiler/rustc_codegen_ssa/src/back/link.rs b/compiler/rustc_codegen_ssa/src/back/link.rs
 index 8188aa0e81e..db89637d716 100644
 --- a/compiler/rustc_codegen_ssa/src/back/link.rs
