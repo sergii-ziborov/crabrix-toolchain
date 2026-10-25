@@ -22,6 +22,7 @@ All source files and notices are public build inputs. The app fetches neither th
 - At most 2 GiB compiler linear memory, with separate smaller WasmKit limits for user programs and macros.
 - One owned native compiler invocation at a time, on a 32 MiB worker stack.
 - Function/loop checkpoints charge finite work, poll cancellation and check the native stack margin. Work is a checkpoint budget, not a claim of native instruction counting.
+- `function-and-backedge-entry-stack` is a separate opt-in source experiment: function entries retain the stack-margin check; backward jumps within a fixed native frame retain work charging and Stop polling without repeating that stack probe. Dynamic stack allocation and unfamiliar array bounds are rejected. The default checkpoint policy and all memory, frame-size, stack-margin and polling limits remain unchanged. It requires its own generated-source inventory and full acceptance runs before promotion.
 - Clang rejects frames above 128 KiB. A 512 KiB margin protects the next stack prologue; a separate 4,096-call depth limit remains enabled.
 - Native C objects retain frame pointers but omit unwind tables: all traps use the guarded C ABI, and very large generated functions exceed Apple's compact-unwind offset encoding. Swift and Objective-C app objects retain their ordinary unwind metadata.
 - Every native exported operation installs its own C trap frame, including reentrant procedural macro dispatch. Swift callbacks report errors by returning. No `longjmp` crosses Swift frames.

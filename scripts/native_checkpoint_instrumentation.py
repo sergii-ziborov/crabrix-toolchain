@@ -13,7 +13,7 @@ LABEL = re.compile(r"(?m)^\s*(\w+):")
 
 
 def instrument(source, policy="all-branches"):
-    if policy not in ("all-branches", "function-and-backedge"):
+    if policy not in ("all-branches", "function-and-backedge", "function-and-backedge-entry-stack"):
         raise ValueError("unknown native checkpoint policy")
     counts = {"functionEntries": 0, "backedges": 0, "forwardEdges": 0}
     total_jumps = len(JUMP.findall(source))
@@ -31,6 +31,17 @@ def instrument(source, policy="all-branches"):
             raise ValueError("generated function lacks exactly one entry checkpoint")
         if re.search(r"\b(?:while|for|do)\s*[({]", body):
             raise ValueError("native loop syntax changed; expected wasm2c goto loops")
+        if policy == "function-and-backedge-entry-stack":
+            # wasm2c guest frames have fixed-size locals. A backward jump
+            # cannot grow that frame; each called guest function checks its
+            # own entry. Reject dynamic native stack allocation rather than
+            # applying that reasoning to a changed generator shape.
+            if re.search(r"\b(?:__builtin_)?alloca\w*\s*\(", body):
+                raise ValueError("dynamic native stack allocation is incompatible with entry stack checks")
+            arrays = re.findall(r"(?m)^\s*(?!(?:return|goto)\b)(?:[\w*]+\s+)+\w+\s*((?:\[[^]]*\]\s*)+)", body)
+            bounds = [bound for dimensions in arrays for bound in re.findall(r"\[([^]]*)\]", dimensions)]
+            if any(not re.fullmatch(r"\s*[1-9][0-9]*\s*", bound) for bound in bounds):
+                raise ValueError("unrecognized native array bound is incompatible with entry stack checks")
         counts["functionEntries"] += 1
         labels = {}
         for label in LABEL.finditer(body):
@@ -48,7 +59,8 @@ def instrument(source, policy="all-branches"):
             backward = labels[name] <= item.start()
             counts["backedges" if backward else "forwardEdges"] += 1
             if backward or policy == "all-branches":
-                return "do { crabrix_native_checkpoint(); goto " + name + "; } while (0);"
+                checkpoint = "crabrix_native_loop_checkpoint" if policy == "function-and-backedge-entry-stack" else "crabrix_native_checkpoint"
+                return "do { " + checkpoint + "(); goto " + name + "; } while (0);"
             return item.group()
 
         body = JUMP.sub(jump, body)

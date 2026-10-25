@@ -45,6 +45,51 @@ void w2c_second(
                        "void w2c_test(void) {\n again:; goto again;\n}"]:
             with self.assertRaises(ValueError): instrument(source, "function-and-backedge")
 
+    def test_entry_stack_policy_rejects_dynamic_native_frames(self):
+        for body in ("alloca(64);", "__builtin_alloca_with_align(n, 16);", "u32 local[n];", "int local[count] = {0};",
+                     "unsigned long local[n];", "u32 local[4][n];"):
+            with self.subTest(body=body), self.assertRaises(ValueError):
+                instrument("void w2c_test(void) {\n FUNC_PROLOGUE;\n " + body + "\n}\n", "function-and-backedge-entry-stack")
+
+    def test_real_entry_stack_policy_keeps_work_stop_and_entry_stack_guards(self):
+        clang = shutil.which("clang")
+        self.assertIsNotNone(clang)
+        header = pathlib.Path(__file__).resolve().parents[1] / "native-compiler"
+        prefix = """#include <stdlib.h>
+#include "native-checkpoint.h"
+#define FUNC_PROLOGUE
+#define FUNC_EPILOGUE
+CrabrixNativeBudget* crabrix_native_active_budget;
+static int polls;
+static int32_t stop(void* context) { return ++polls == 3; }
+void wasm_rt_trap(int reason) { exit(reason); }
+"""
+        loop = "void w2c_loop(void) {\n FUNC_PROLOGUE;\n again:; goto again;\n}\n"
+        recurse = "void w2c_recurse(void) {\n FUNC_PROLOGUE;\n w2c_recurse();\n}\n"
+        cases = [
+            (loop, ".remaining=4", "w2c_loop();", 11),
+            (loop, ".remaining=1000000, .poll=stop", "w2c_loop();", 12),
+            (recurse, ".remaining=4", "w2c_recurse();", 11),
+            (loop, ".remaining=1000000", "b.stack_low=(uintptr_t)__builtin_frame_address(0); w2c_loop();", 11),
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            (root / "wasm-rt.h").write_text("#define WASM_RT_TRAP_EXHAUSTION 11\n#define WASM_RT_TRAP_UNREACHABLE 12\nvoid wasm_rt_trap(int);\n")
+            for n, (source, initial, call, status) in enumerate(cases):
+                code, counts = instrument(source, "function-and-backedge-entry-stack")
+                self.assertEqual(counts["functionEntries"], 1)
+                self.assertEqual(code.count("FUNC_PROLOGUE; crabrix_native_checkpoint();"), 1)
+                if source == loop:
+                    self.assertEqual(counts["backedges"], 1)
+                    self.assertIn("crabrix_native_loop_checkpoint(); goto again;", code)
+                path = root / f"stack{n}.c"
+                path.write_text(prefix + code + "int main(void) { CrabrixNativeBudget b={" + initial
+                                + "}; crabrix_native_active_budget=&b; " + call + " return 0; }\n")
+                binary = root / f"stack{n}"
+                subprocess.run([clang, "-O2", "-fno-optimize-sibling-calls", "-fno-omit-frame-pointer", "-I", str(root), "-I", str(header), str(path), "-o", str(binary)], check=True)
+                run = subprocess.run([str(binary)], timeout=3)
+                self.assertEqual(run.returncode, status)
+
     def test_real_c_loops_recursion_and_forward_branches(self):
         clang = shutil.which("clang")
         self.assertIsNotNone(clang)

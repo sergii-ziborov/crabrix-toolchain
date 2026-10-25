@@ -114,7 +114,8 @@ def generate(artifact, archive, work, output, checkpoint_policy="all-branches"):
         "flags": FLAGS, "checkpointCount": checkpoint_counts["checkpoints"],
         "checkpointPolicy": checkpoint_policy, "checkpointCounts": checkpoint_counts,
         "limits": {"linearMemoryBytes": 2 * 1024**3, "nativeFrameMaximumBytes": 131072,
-                   "stackGuardMarginBytes": 512 * 1024, "pollIntervalCheckpoints": 128},
+                   "stackGuardMarginBytes": 512 * 1024, "pollIntervalCheckpoints": 128,
+                   "stackCheckPlacement": "function-entry" if checkpoint_policy == "function-and-backedge-entry-stack" else "every-checkpoint"},
         "files": files, "sourceBuildProvenance": provenance}
     (output / "native-source-provenance.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     return report
@@ -123,7 +124,7 @@ def generate(artifact, archive, work, output, checkpoint_policy="all-branches"):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("artifact", "wabt-archive", "work", "output"): parser.add_argument("--" + name, type=Path, required=True)
-    parser.add_argument("--checkpoint-policy", choices=("all-branches", "function-and-backedge"), default="all-branches",
+    parser.add_argument("--checkpoint-policy", choices=("all-branches", "function-and-backedge", "function-and-backedge-entry-stack"), default="all-branches",
                         help="backedge-only polling is an opt-in performance experiment until benchmarked")
     args = parser.parse_args()
     result = generate(args.artifact.resolve(), args.wabt_archive.resolve(), args.work.resolve(), args.output.resolve(), args.checkpoint_policy)
