@@ -1,0 +1,100 @@
+#include "NativeCompilerAPI.h"
+#include "rustc.h"
+#include "native-checkpoint.h"
+#include "wasm-rt-impl.h"
+#include <pthread.h>
+#include <setjmp.h>
+#include <stdlib.h>
+
+@IMPORT_CONTEXTS@
+struct CrabrixNativeCompiler {
+  w2c_crabrix__rustc module;
+  @IMPORT_MEMBERS@
+  void* context;
+  CrabrixNativeHostCall host;
+  CrabrixNativeBudget budget;
+  int initialized;
+};
+typedef struct CrabrixTrapFrame {
+  jmp_buf jump;
+  struct CrabrixTrapFrame* previous;
+  uint32_t entry_depth;
+} CrabrixTrapFrame;
+static pthread_mutex_t compiler_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_t compiler_thread;
+static CrabrixNativeCompiler* active_compiler;
+static CrabrixTrapFrame* active_frame;
+CrabrixNativeBudget* crabrix_native_active_budget;
+
+// This is WABT's supported custom trap hook. Every exported operation installs
+// its own frame, including reentrant macro dispatch. Swift callbacks return
+// their error status before the generated C import calls wasm_rt_trap.
+void crabrix_native_trap(wasm_rt_trap_t trap) {
+  if (!active_frame) abort(); // Internal entry-point invariant, never a guest buffer check.
+  wasm_rt_call_stack_depth = active_frame->entry_depth;
+  longjmp(active_frame->jump, trap ? (int)trap : (int)WASM_RT_TRAP_UNREACHABLE);
+}
+const char* crabrix_native_compiler_source_sha256(void) { return "@SOURCE_SHA256@"; }
+CrabrixNativeCompiler* crabrix_native_compiler_create(void* context, CrabrixNativeHostCall host, CrabrixNativePoll poll) {
+  CrabrixNativeCompiler* compiler = calloc(1, sizeof(*compiler));
+  if (!compiler) return NULL;
+  compiler->context = context; compiler->host = host;
+  compiler->budget.context = context; compiler->budget.poll = poll;
+  @INITIALIZE_IMPORTS@
+  return compiler;
+}
+int32_t crabrix_native_compiler_run(CrabrixNativeCompiler* compiler, uint64_t budget) {
+  if (!compiler || compiler->initialized) return -2;
+  if (pthread_mutex_trylock(&compiler_lock)) return -1;
+  compiler_thread = pthread_self(); active_compiler = compiler;
+  compiler->budget.remaining = budget; compiler->budget.ticks = 0;
+  compiler->budget.stack_low = (uintptr_t)pthread_get_stackaddr_np(compiler_thread) - pthread_get_stacksize_np(compiler_thread);
+  crabrix_native_active_budget = &compiler->budget;
+  CrabrixTrapFrame frame = {.previous = active_frame, .entry_depth = wasm_rt_call_stack_depth};
+  active_frame = &frame;
+  int32_t trap = setjmp(frame.jump);
+  if (!trap) {
+    wasm_rt_init();
+    // The zero-initialized module may be freed even if instantiation traps.
+    compiler->initialized = 1;
+    wasm2c_crabrix__rustc_instantiate(&compiler->module, @INSTANTIATE_IMPORTS@);
+    if (compiler->module.w2c_memory.max_pages > 32768) compiler->module.w2c_memory.max_pages = 32768;
+    @START_EXPORT@(&compiler->module);
+  }
+  wasm_rt_call_stack_depth = frame.entry_depth; active_frame = frame.previous;
+  crabrix_native_active_budget = NULL; active_compiler = NULL;
+  pthread_mutex_unlock(&compiler_lock);
+  return trap;
+}
+int32_t crabrix_native_compiler_export(CrabrixNativeCompiler* compiler, uint32_t kind,
+                                     uint32_t first, uint32_t second, uint64_t* result) {
+  if (!compiler || active_compiler != compiler || !pthread_equal(compiler_thread, pthread_self()) || !active_frame || !result) return -2;
+  CrabrixTrapFrame frame = {.previous = active_frame, .entry_depth = wasm_rt_call_stack_depth};
+  active_frame = &frame;
+  int32_t trap = setjmp(frame.jump);
+  if (!trap) {
+    switch (kind) {
+      case 1: *result = @ALLOC_EXPORT@(&compiler->module, first); break;
+      case 2: @FREE_EXPORT@(&compiler->module, first, second); *result = 0; break;
+      case 3: *result = @DISPATCH_EXPORT@(&compiler->module, first, second); break;
+      default: trap = -2; break;
+    }
+  }
+  wasm_rt_call_stack_depth = frame.entry_depth; active_frame = frame.previous;
+  return trap;
+}
+uint8_t* crabrix_native_compiler_memory(CrabrixNativeCompiler* compiler) { return compiler ? compiler->module.w2c_memory.data : NULL; }
+uint64_t crabrix_native_compiler_memory_size(CrabrixNativeCompiler* compiler) { return compiler ? compiler->module.w2c_memory.size : 0; }
+uint64_t crabrix_native_compiler_remaining_work(CrabrixNativeCompiler* compiler) { return compiler ? compiler->budget.remaining : 0; }
+int32_t crabrix_native_compiler_reduce_work(CrabrixNativeCompiler* compiler, uint64_t remaining) {
+  if (!compiler || active_compiler != compiler || !pthread_equal(compiler_thread, pthread_self()) || remaining > compiler->budget.remaining) return -2;
+  compiler->budget.remaining = remaining; return 0;
+}
+void crabrix_native_compiler_free(CrabrixNativeCompiler* compiler) {
+  if (!compiler) return;
+  if (compiler->initialized) wasm2c_crabrix__rustc_free(&compiler->module);
+  // WABT's process-wide type registry remains alive for subsequent compiler
+  // instances. Only this instance's tables and linear memory are freed.
+  free(compiler);
+}
+@IMPORT_FUNCTIONS@
