@@ -10,6 +10,9 @@
 
 static int mode, polls, returned_from_nested_trap;
 static CrabrixNativeCompiler* current;
+#ifndef CRABRIX_TEST_LOOP_CHECKPOINT
+#define CRABRIX_TEST_LOOP_CHECKPOINT crabrix_native_checkpoint
+#endif
 
 void wasm2c_crabrix__rustc_instantiate(w2c_crabrix__rustc* m,
     struct w2c_crabrix__proc__macro__v1* p, struct w2c_wasi__snapshot__preview1* w) {
@@ -24,7 +27,7 @@ u64 w2c_crabrix__rustc_0x5F_crabrix_pm_dispatch(w2c_crabrix__rustc* m, u32 p, u3
   wasm_rt_trap(WASM_RT_TRAP_OOB);
 }
 void w2c_crabrix__rustc_0x5Fstart(w2c_crabrix__rustc* m) {
-  if (mode == 1 || mode == 2) for (;;) crabrix_native_checkpoint();
+  if (mode == 1 || mode == 2) for (;;) CRABRIX_TEST_LOOP_CHECKPOINT();
   if (mode == 3) wasm_rt_trap(WASM_RT_TRAP_OOB);
   if (mode == 4) w2c_crabrix__proc__macro__v1_exchange(m->w2c_crabrix__proc__macro__v1_instance, 0, 0, 0, 0, 0, 0);
   if (mode == 5) {
