@@ -23,7 +23,12 @@ def compile_sources(source, output, sdk, target, jobs):
     sdk_path = subprocess.check_output(['xcrun', '--sdk', sdk, '--show-sdk-path'], text=True).strip()
     clang = subprocess.check_output(['xcrun', '--sdk', sdk, '--find', 'clang'], text=True).strip()
     compiler_version = subprocess.check_output([clang, '--version'], text=True)
-    flags = ['-target', target, '-isysroot', sdk_path, '-I', str(source)] + provenance['flags']
+    # Native compiler traps return through explicit C setjmp scopes; C++/ObjC
+    # unwinding through generated guest frames is never part of this ABI.
+    # Huge wasm2c functions exceed Apple's compact-unwind offset encoding.
+    # Keep frame pointers, but omit unwind tables for these C objects only.
+    flags = ['-target', target, '-isysroot', sdk_path, '-I', str(source)] + provenance['flags'] + [
+        '-fno-unwind-tables', '-fno-asynchronous-unwind-tables']
     identity = hashlib.sha256(json.dumps([provenance, flags, compiler_version], sort_keys=True).encode()).hexdigest()
     output.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
