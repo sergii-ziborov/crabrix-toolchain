@@ -34,7 +34,7 @@ The selected original guarded O1 kernel also completed a real `iphoneos` SDK
 build for `arm64-apple-ios18.0`: native library SHA-256
 `55cee47f66a399abf2988e621ad9576456edac0d9c4fe887d220666ba145159e`, package
 SHA-256 `fbb271acfbbafbbe5bdb1841e798d929b953c0339f4d04db07cac5aea29999a1`.
-The package retains the verified source archive and original build provenance
+The package retains the verified source archive digest and original build provenance
 and remains a candidate. Device execution, production promotion and signing
 have not been claimed by this cross-build.
 - Clang rejects frames above 128 KiB. A 512 KiB margin protects the next stack prologue; a separate 4,096-call depth limit remains enabled.
