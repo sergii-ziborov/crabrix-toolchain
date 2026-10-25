@@ -72,6 +72,16 @@ patch includes `clif2wasm/examples/atomic_memory_fixture.rs` and
 unchanged Kameo acceptance are still required after rebuilding. These backend
 checks alone do not qualify a release or establish a device timing.
 
+An optional native-generation experiment, `--checkpoint-policy
+function-and-backedge`, removes polling on forward-only branches while keeping
+function-entry and backward-edge checks. The default remains `all-branches`.
+The parser rejects unfamiliar function/loop shapes and unresolved labels. Real C
+tests verify that infinite loops and recursion still exhaust the budget. On the
+64-file compiler corpus it retains 188,147 of 2,113,181 static checkpoints; this
+is a code-generation count, not a measured runtime speedup. The original
+all-branches output was also compared byte for byte across that corpus. New
+performance and Stop gates are required before selecting the experiment.
+
 ## Build inputs and commands
 
 [`toolchain.lock.json`](toolchain.lock.json) pins the builder and Rust commits,

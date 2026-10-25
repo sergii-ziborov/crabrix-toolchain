@@ -14,6 +14,7 @@ import subprocess
 import tarfile
 
 import qualified_macos
+from native_checkpoint_instrumentation import instrument
 
 WABT_SHA = "3f654779b436c628db3ca4323c51538815f5fbc887a6d5f3bb1c18d36281e240"
 FLAGS = ["-O1", "-g0", "-DNDEBUG=1", "-fno-optimize-sibling-calls", "-fno-omit-frame-pointer", "-frounding-math",
@@ -26,7 +27,7 @@ FLAGS = ["-O1", "-g0", "-DNDEBUG=1", "-fno-optimize-sibling-calls", "-fno-omit-f
 def sha(path): return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def generate(artifact, archive, work, output):
+def generate(artifact, archive, work, output, checkpoint_policy="all-branches"):
     root = Path(__file__).resolve().parents[1]
     provenance = json.loads((artifact / "provenance.json").read_text())
     qualified_macos.validate_source(provenance, qualified_macos.profile())
@@ -97,13 +98,10 @@ def generate(artifact, archive, work, output):
     for path in (wabt / "include").glob("wasm-rt*.h"): shutil.copyfile(path, output / path.name)
     for path in (wabt / "share/wabt/wasm2c").glob("wasm-rt*"):
         if path.is_file(): shutil.copyfile(path, output / path.name)
-    checkpoints = 0
+    checkpoint_counts = {"functionEntries": 0, "backedges": 0, "forwardEdges": 0, "checkpoints": 0}
     for path in output.glob("rustc*.c"):
-        source = path.read_text()
-        checkpoints += source.count("FUNC_PROLOGUE;")
-        source = source.replace("FUNC_PROLOGUE;", "FUNC_PROLOGUE; crabrix_native_checkpoint();")
-        source, jumps = re.subn(r"\bgoto (\w+);", r"do { crabrix_native_checkpoint(); goto \1; } while (0);", source)
-        checkpoints += jumps
+        source, counts = instrument(path.read_text(), checkpoint_policy)
+        for key, value in counts.items(): checkpoint_counts[key] += value
         path.write_text('#include "native-checkpoint.h"\n' + source)
     # Ordinary simulator builds keep their VM backend. A separate, explicit
     # simulator candidate may compile this same source for its actual SDK.
@@ -112,7 +110,9 @@ def generate(artifact, archive, work, output):
     files = [{"path": path.name, "bytes": path.stat().st_size, "sha256": sha(path)} for path in sorted(output.iterdir()) if path.is_file()]
     report = {"schemaVersion": 1, "candidate": True, "productionReplacement": False,
         "compilerWASMSHA256": provenance["compilerSHA256"], "wabtArchiveSHA256": WABT_SHA,
-        "generatorSHA256": sha(Path(__file__)), "flags": FLAGS, "checkpointCount": checkpoints,
+        "generatorSHA256": sha(Path(__file__)), "checkpointInstrumenterSHA256": sha(root / "scripts/native_checkpoint_instrumentation.py"),
+        "flags": FLAGS, "checkpointCount": checkpoint_counts["checkpoints"],
+        "checkpointPolicy": checkpoint_policy, "checkpointCounts": checkpoint_counts,
         "limits": {"linearMemoryBytes": 2 * 1024**3, "nativeFrameMaximumBytes": 131072,
                    "stackGuardMarginBytes": 512 * 1024, "pollIntervalCheckpoints": 128},
         "files": files, "sourceBuildProvenance": provenance}
@@ -123,8 +123,10 @@ def generate(artifact, archive, work, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("artifact", "wabt-archive", "work", "output"): parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--checkpoint-policy", choices=("all-branches", "function-and-backedge"), default="all-branches",
+                        help="backedge-only polling is an opt-in performance experiment until benchmarked")
     args = parser.parse_args()
-    result = generate(args.artifact.resolve(), args.wabt_archive.resolve(), args.work.resolve(), args.output.resolve())
+    result = generate(args.artifact.resolve(), args.wabt_archive.resolve(), args.work.resolve(), args.output.resolve(), args.checkpoint_policy)
     print(json.dumps({key: result[key] for key in ("compilerWASMSHA256", "checkpointCount", "flags")}, indent=2))
 
 

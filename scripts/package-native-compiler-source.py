@@ -39,7 +39,8 @@ def package(first, repeat, output):
     if a['sourceBuildProvenance']['cloudBuildID'] == b['sourceBuildProvenance']['cloudBuildID']:
         raise ValueError('Independent compiler origins are required')
     fields = ('compilerWASMSHA256', 'wabtArchiveSHA256', 'generatorSHA256', 'flags', 'checkpointCount', 'limits', 'files')
-    if any(a[key] != b[key] for key in fields):
+    optional = ('checkpointInstrumenterSHA256', 'checkpointPolicy', 'checkpointCounts')
+    if any(a[key] != b[key] for key in fields) or any(a.get(key) != b.get(key) for key in optional):
         raise ValueError('Independent compiler translations differ')
     if output.exists(): raise ValueError('Native source packages are immutable; use a fresh output')
     root = Path(__file__).resolve().parents[1]

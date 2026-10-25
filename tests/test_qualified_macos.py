@@ -134,6 +134,7 @@ class QualifiedMacTests(unittest.TestCase):
     def test_rejects_missing_skipped_or_token_only_macro_acceptance(self):
         original = copy.deepcopy(self.compat)
         for change in (lambda c: c.update(gates=[g for g in c["gates"] if g["id"] != "serde-derive"]),
+                       lambda c: c.update(gates=[g for g in c["gates"] if g["id"] != "atomic-widths"]),
                        lambda c: c["gates"][0].update(skipped=1),
                        lambda c: c["environment"].update(dispatch="token")):
             self.compat = copy.deepcopy(original)
