@@ -79,6 +79,8 @@ def build(dist, bundles, app_commit, runtime_revision, test_app, test_run,
         environment = run.get("EnvironmentVariables", {})
         if environment.get("CRABRIX_EXPERIMENTAL_DIRECT_GATE") != "1" or \
                 environment.get("CRABRIX_RUN_PROC_MACRO_BRIDGE") != "1" or \
+                environment.get("CRABRIX_RUN_COLD_COMPARISON") != "1" or \
+                environment.get("CRABRIX_VERIFY_BUNDLED_MACROS") != "1" or \
                 environment.get("CRABRIX_COMPILER_CANDIDATE_PROFILE") == "1":
             raise ValueError("Mac qualification must exercise the main app toolchain in direct mode")
         macro = test_app / "PlugIns/CrabrixTests.xctest/CompilerCandidate/ArtifactMacro"
