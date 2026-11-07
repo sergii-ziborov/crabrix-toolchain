@@ -13,11 +13,33 @@ The current compiler derives from Rust source commit
 Cranelift and the in-process `riwl` linker. The selected source revision's
 connection to the older `artifacts-test-7` binary is inferred from the builder
 history; these new artifacts are produced by this pipeline and have their own
-digests. The build compiles LLVM from the pinned Rust submodule and uses a
-verified prebuilt stage0 compiler and WASI SDK. It does not claim a bootstrap
+digests. The Linux profile builds LLVM from the pinned Rust submodule; the Mac
+profile records its verified intermediate Darwin LLVM separately. Both use
+verified prebuilt stage0 compiler and WASI SDK inputs. It does not claim a bootstrap
 from bare metal.
 
-## Current release
+## Qualified release selected for app build 135
+
+[`toolchain-2026-11-07.1`](https://github.com/sergii-ziborov/crabrix-toolchain/releases/tag/toolchain-2026-11-07.1)
+is the signed Mac WASI package selected by Crabrix 1.1.8 build 135. Compiler
+`27acccf94e1f4083b311b352164fe1a310077c76f4cd3e221a2ee26b02309008`
+and its matching macro-capable sysroot fix narrow atomic memory accesses.
+Two independent source builds produced identical raw compiler, sysroot ZIP
+and inventory bytes; their original provenance is embedded unchanged.
+
+All 17 required optimized Release Simulator gates passed with zero failures
+or skips on arm64 iOS 26.5, built with Xcode 27.2. This includes adjacent-byte
+atomic canaries, all 46 Academy examples, real dependencies, Stop, unchanged
+identity macros, Serde derive and the full 32-package Kameo actor graph.
+The test host explicitly enables legacy migration fixtures. Signing and the
+independent public verifier enforce this profile and its original source inputs.
+The app's full regression and publication steps are tracked in its release record.
+
+The signed `proc-macro-rpc-v1` capability enables WASI macros. Compiler data
+remains interpreted by the bounded CrabrixRuntime; the separate native AOT
+compiler experiments are not enabled. No physical-device timing is inferred.
+
+## Earlier Linux release
 
 [toolchain-2026-10-02.1](https://github.com/sergii-ziborov/crabrix-toolchain/releases/tag/toolchain-2026-10-02.1)
 contains `rustc.wasm`, the `wasm32-wasip1` sysroot ZIP and per-file inventory,
@@ -49,7 +71,7 @@ The manual Xcode Cloud experiments use a separate, pinned Mac recipe. They do
 not replace the release above merely because they compile or reproduce.
 [`release-profiles/macos-wasi-rpc-fat-2026-10-25.json`](release-profiles/macos-wasi-rpc-fat-2026-10-25.json)
 defines the exact source, bridge patch, fat-LTO flags, verified SDK and native
-intermediate LLVM for a future qualified release. The default release interprets
+intermediate LLVM for the qualified WASI release. The default release interprets
 compiler WASI data. A separate native translation of that fixed compiler can be
 statically built into the signed app; downloaded projects and macro crates remain
 WASM guests, and no native iOS code is downloaded to the phone.
@@ -63,7 +85,7 @@ verification independently recheck the profile and consumer results. A source
 build marked as a candidate cannot be signed directly, and the existing Linux
 qualification path retains its original checks. The signed macro capability
 is emitted only for a successfully qualified profile. This section documents
-the preparation workflow; it does not claim that the new compiler has shipped.
+the qualification workflow; App Store availability is tracked by the app release.
 
 The current candidate patch also corrects CLIF i8/i16 atomic memory widths and
 signed narrow min/max comparisons. The prior backend fails a load beside nonzero
@@ -93,8 +115,8 @@ observations on the shared Mac range from 19.480 to 40.436 seconds. Later O2 and
 function-entry stack-probe experiments passed functional tests but did not
 establish an advantage over matching controls, so the original guarded O1 kernel
 is retained. A separate real `iphoneos` arm64 static archive also built successfully.
-These are candidate artifacts, not shipping compiler inputs or physical-iPhone
-performance claims. [Native workflow](native-compiler/README.md) and
+These native archives remain candidate artifacts and do not describe the
+interpreted compiler selected for build 135 or physical-iPhone performance. [Native workflow](native-compiler/README.md) and
 [exact iOS artifact record](https://github.com/sergii-ziborov/Crabrix/blob/codex/compiler-speed-20261024/docs/performance/2026-10-26-native-iphoneos-candidate.json).
 
 ## Build inputs and commands
