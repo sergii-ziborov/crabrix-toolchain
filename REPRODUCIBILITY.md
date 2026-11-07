@@ -43,3 +43,5 @@ and `build-log-summary.txt` for the precise result.
 This is a **source-pinned**, functionally tested release. Raw binary
 reproducibility is not established. A future build may remap the source root
 before compilation and then repeat the two-build comparison and app gates.
+
+The historical October 1 descriptor utility and its exact-byte verification tests are retained in `scripts/toolchain_descriptor.py`. Its T01–T06 evidence schema is documented in `docs/COMPATIBILITY-RESULTS.md`; its public deterministic keyring is test-only. Current Mac release qualification, independent-build comparison and protected production signing requirements above remain authoritative.

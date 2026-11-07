@@ -2,3 +2,4 @@ work/
 dist/
 *.part
 __pycache__/
+.venv/
