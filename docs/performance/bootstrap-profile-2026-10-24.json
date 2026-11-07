@@ -1,0 +1,56 @@
+{
+  "bootstrapSHA256": "0c5a1993f61a29efbca1aa3241c7e51f0108fe63333629d1716c48dc98566454",
+  "candidateOverrides": {
+    "debug-assertions": false,
+    "debug-assertions-std": false,
+    "debug-assertions-tools": false,
+    "debug-logging": false,
+    "frame-pointers": false,
+    "incremental": false,
+    "lto": "thin",
+    "optimize": true
+  },
+  "mergedRustSettings": {
+    "backtrace-on-ice": true,
+    "codegen-backends": [
+      "llvm",
+      "cranelift"
+    ],
+    "debug": false,
+    "debug-assertions": true,
+    "debug-logging": true,
+    "debuginfo-level": 0,
+    "deny-warnings": false,
+    "download-rustc": false,
+    "frame-pointers": true,
+    "incremental": true,
+    "llvm-bitcode-linker": false,
+    "llvm-tools": false,
+    "lto": "off"
+  },
+  "profile": "compiler",
+  "profileDefaultsSHA256": "40c1af4ef858cd3ab7c3ebc1101755e8476460f48c08bf85420a57a8ce6206cf",
+  "scope": "raw named-profile merge and explicit overrides; not a completed bootstrap build",
+  "settingsAfterOverrides": {
+    "backtrace-on-ice": true,
+    "codegen-backends": [
+      "llvm",
+      "cranelift"
+    ],
+    "debug": false,
+    "debug-assertions": false,
+    "debug-assertions-std": false,
+    "debug-assertions-tools": false,
+    "debug-logging": false,
+    "debuginfo-level": 0,
+    "deny-warnings": false,
+    "download-rustc": false,
+    "frame-pointers": false,
+    "incremental": false,
+    "llvm-bitcode-linker": false,
+    "llvm-tools": false,
+    "lto": "thin",
+    "optimize": true
+  },
+  "source": "/Users/serhiirihgt/dev/crabrix-rust-source"
+}

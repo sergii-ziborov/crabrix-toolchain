@@ -25,6 +25,12 @@ GATES = {
     "multi-file-cli": "BundledCompilerGateTests/testMultiFileClapRegexCollectionsAppBuildsAndRuns()",
     "warning-cache": "CompilerPerformanceProbeTests/testColdEngineAndUnchangedWarningCheck()",
 }
+MACRO_GATES = {
+    "proc-macro-identity": "BundledCompilerGateTests/testWASIProcMacroIdentityUsesTheUnchangedMacroSource()",
+    "serde-derive": "BundledCompilerGateTests/testSerdeDeriveRunsThroughTheOfflineWASIMacroBridge()",
+    "kameo-actors": "BundledCompilerGateTests/testUnchangedKameoColdActorsAndChangedRootRunOffline()",
+    "atomic-widths": "BundledCompilerGateTests/testAtomicBoolAndIntegerStateRemainConsistent()",
+}
 
 
 def digest(path):
@@ -56,7 +62,7 @@ def leaves(node):
 
 
 def build(dist, bundles, app_commit, runtime_revision, test_app, test_run,
-          known_failure_bundles=()):
+          known_failure_bundles=(), macos_profile=False):
     if any(not re.fullmatch(r"[0-9a-f]{40}", value)
            for value in (app_commit, runtime_revision)):
         raise ValueError("app and runtime revisions must be exact commits")
@@ -68,6 +74,20 @@ def build(dist, bundles, app_commit, runtime_revision, test_app, test_run,
     if not isinstance(run, dict) or run.get("TestHostPath") != \
             "__TESTROOT__/Release-iphonesimulator/Crabrix.app":
         raise ValueError("xctestrun does not target the Release app")
+    gates_required = dict(GATES)
+    if macos_profile:
+        environment = run.get("EnvironmentVariables", {})
+        if environment.get("CRABRIX_EXPERIMENTAL_DIRECT_GATE") != "1" or \
+                environment.get("CRABRIX_RUN_PROC_MACRO_BRIDGE") != "1" or \
+                environment.get("CRABRIX_RUN_COLD_COMPARISON") != "1" or \
+                environment.get("CRABRIX_VERIFY_BUNDLED_MACROS") != "1" or \
+                environment.get("CRABRIX_COMPILER_CANDIDATE_PROFILE") == "1":
+            raise ValueError("Mac qualification must exercise the main app toolchain in direct mode")
+        macro = test_app / "PlugIns/CrabrixTests.xctest/CompilerCandidate/ArtifactMacro"
+        if any(digest(macro / name) != digest(dist / name)
+               for name in ("rustc.wasm", "sysroot-wasip1.zip", "sysroot-files.json")):
+            raise ValueError("macro fixture and main app toolchain differ")
+        gates_required.update(MACRO_GATES)
     manifest = json.loads((test_app / "toolchain.lock.json").read_bytes())
     compiler_sha = digest(dist / "rustc.wasm")
     sysroot_sha = digest(dist / "sysroot-wasip1.zip")
@@ -105,7 +125,7 @@ def build(dist, bundles, app_commit, runtime_revision, test_app, test_run,
             if case.get("result") != "Passed" or not isinstance(test, str) or test in results:
                 raise ValueError(f"failed or duplicate test case: {test}")
             results[test] = (case, bundle.name)
-    missing = set(GATES.values()) - set(results)
+    missing = set(gates_required.values()) - set(results)
     if missing:
         raise ValueError(f"release gates were not executed: {sorted(missing)}")
     failed_probes = []
@@ -122,7 +142,7 @@ def build(dist, bundles, app_commit, runtime_revision, test_app, test_run,
             failed_probes.append({"test": case["nodeIdentifier"],
                                   "result": "Failed", "resultBundle": bundle.name})
     gates = []
-    for gate_id, test in GATES.items():
+    for gate_id, test in gates_required.items():
         case, bundle_name = results[test]
         gates.append({
             "id": gate_id, "test": test, "executed": 1, "passed": 1,
@@ -144,6 +164,7 @@ def build(dist, bundles, app_commit, runtime_revision, test_app, test_run,
             "osBuildNumber": device["osBuildNumber"],
             "deviceModel": device["modelName"],
             "architecture": device["architecture"],
+            **({"dispatch": "software-direct"} if macos_profile else {}),
         },
         "gates": gates,
         "failedProbes": failed_probes,
@@ -159,12 +180,14 @@ def main():
     parser.add_argument("--known-failure-xcresult", type=Path, action="append", default=[])
     parser.add_argument("--test-app", type=Path, required=True)
     parser.add_argument("--xctestrun", type=Path, required=True)
+    parser.add_argument("--macos-profile", action="store_true")
     args = parser.parse_args()
     output = args.dist / "compatibility-results.json"
     if output.exists():
         parser.error("compatibility report already exists")
     report = build(args.dist, args.xcresult, args.app_commit, args.runtime_revision,
-                   args.test_app, args.xctestrun, args.known_failure_xcresult)
+                   args.test_app, args.xctestrun, args.known_failure_xcresult,
+                   args.macos_profile)
     output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     print(f"Recorded {len(report['gates'])} passed app gates from Xcode result bundles")
 

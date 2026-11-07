@@ -13,11 +13,33 @@ The current compiler derives from Rust source commit
 Cranelift and the in-process `riwl` linker. The selected source revision's
 connection to the older `artifacts-test-7` binary is inferred from the builder
 history; these new artifacts are produced by this pipeline and have their own
-digests. The build compiles LLVM from the pinned Rust submodule and uses a
-verified prebuilt stage0 compiler and WASI SDK. It does not claim a bootstrap
+digests. The Linux profile builds LLVM from the pinned Rust submodule; the Mac
+profile records its verified intermediate Darwin LLVM separately. Both use
+verified prebuilt stage0 compiler and WASI SDK inputs. It does not claim a bootstrap
 from bare metal.
 
-## Current release
+## Qualified release selected for app build 135
+
+[`toolchain-2026-11-07.1`](https://github.com/sergii-ziborov/crabrix-toolchain/releases/tag/toolchain-2026-11-07.1)
+is the signed Mac WASI package selected by Crabrix 1.1.8 build 135. Compiler
+`27acccf94e1f4083b311b352164fe1a310077c76f4cd3e221a2ee26b02309008`
+and its matching macro-capable sysroot fix narrow atomic memory accesses.
+Two independent source builds produced identical raw compiler, sysroot ZIP
+and inventory bytes; their original provenance is embedded unchanged.
+
+All 17 required optimized Release Simulator gates passed with zero failures
+or skips on arm64 iOS 26.5, built with Xcode 27.2. This includes adjacent-byte
+atomic canaries, all 46 Academy examples, real dependencies, Stop, unchanged
+identity macros, Serde derive and the full 32-package Kameo actor graph.
+The test host explicitly enables legacy migration fixtures. Signing and the
+independent public verifier enforce this profile and its original source inputs.
+The app's full regression and publication steps are tracked in its release record.
+
+The signed `proc-macro-rpc-v1` capability enables WASI macros. Compiler data
+remains interpreted by the bounded CrabrixRuntime; the separate native AOT
+compiler experiments are not enabled. No physical-device timing is inferred.
+
+## Earlier Linux release
 
 [toolchain-2026-10-02.1](https://github.com/sergii-ziborov/crabrix-toolchain/releases/tag/toolchain-2026-10-02.1)
 contains `rustc.wasm`, the `wasm32-wasip1` sysroot ZIP and per-file inventory,
@@ -42,6 +64,60 @@ records raw compiler and sysroot digests from separate clean build-output
 directories in the same pinned Linux amd64 image. Read its status before
 claiming byte-for-byte reproducibility. The current release keeps Wasm name
 and debug sections; a smaller stripped candidate remains an experiment.
+
+### Mac performance and procedural-macro qualification
+
+The manual Xcode Cloud experiments use a separate, pinned Mac recipe. They do
+not replace the release above merely because they compile or reproduce.
+[`release-profiles/macos-wasi-rpc-fat-2026-10-25.json`](release-profiles/macos-wasi-rpc-fat-2026-10-25.json)
+defines the exact source, bridge patch, fat-LTO flags, verified SDK and native
+intermediate LLVM for the qualified WASI release. The default release interprets
+compiler WASI data. A separate native translation of that fixed compiler can be
+statically built into the signed app; downloaded projects and macro crates remain
+WASM guests, and no native iOS code is downloaded to the phone.
+
+`scripts/qualify-macos-release.py` requires two independent raw source builds
+with identical compiler, source-built sysroot ZIP and per-file inventory, plus
+the full Release app gates, an unchanged identity macro, Serde derive and the
+unchanged 32-package Kameo actor workload. The original experimental provenance
+is embedded verbatim in the new qualification record. Signing and public
+verification independently recheck the profile and consumer results. A source
+build marked as a candidate cannot be signed directly, and the existing Linux
+qualification path retains its original checks. The signed macro capability
+is emitted only for a successfully qualified profile. This section documents
+the qualification workflow; App Store availability is tracked by the app release.
+
+The current candidate patch also corrects CLIF i8/i16 atomic memory widths and
+signed narrow min/max comparisons. The prior backend fails a load beside nonzero
+canary bytes; the corrected backend passes 1,420 executed Wasmtime checks across
+8-, 16-, 32- and 64-bit loads, stores, compare/exchange and RMW operations. The
+patch includes `clif2wasm/examples/atomic_memory_fixture.rs` and
+`clif2wasm/tests/atomic_memory.py` to reproduce this check. The rebuilt full
+compiler subsequently passed unchanged Kameo acceptance on the simulator as
+recorded below; real-device qualification remains outstanding. The backend
+checks alone do not qualify a release or establish a device timing.
+
+An optional native-generation experiment, `--checkpoint-policy
+function-and-backedge`, removes polling on forward-only branches while keeping
+function-entry and backward-edge checks. The default remains `all-branches`.
+The parser rejects unfamiliar function/loop shapes and unresolved labels. Real C
+tests verify that infinite loops and recursion still exhaust the budget. On the
+64-file compiler corpus it retains 188,147 of 2,113,181 static checkpoints; this
+is a code-generation count, not a measured runtime speedup. The original
+all-branches output was also compared byte for byte across that corpus. New
+performance and Stop gates are required before selecting the experiment.
+
+The corrected compiler `27acccf94e1f4083b311b352164fe1a310077c76f4cd3e221a2ee26b02309008`
+has now passed ten native simulator gates, including real macros, the unchanged
+31-dependency Kameo workload, Axum, Stop and UI responsiveness. Its generated C
+retains 188,148 function/backedge checkpoints and full stack probes. Cold Kameo
+observations on the shared Mac range from 19.480 to 40.436 seconds. Later O2 and
+function-entry stack-probe experiments passed functional tests but did not
+establish an advantage over matching controls, so the original guarded O1 kernel
+is retained. A separate real `iphoneos` arm64 static archive also built successfully.
+These native archives remain candidate artifacts and do not describe the
+interpreted compiler selected for build 135 or physical-iPhone performance. [Native workflow](native-compiler/README.md) and
+[exact iOS artifact record](https://github.com/sergii-ziborov/Crabrix/blob/codex/compiler-speed-20261024/docs/performance/2026-10-26-native-iphoneos-candidate.json).
 
 ## Build inputs and commands
 
@@ -128,7 +204,7 @@ third-party components.
 The native app and companion website are maintained in
 [Crabrix](https://github.com/sergii-ziborov/Crabrix); signed course data lives in
 [crabrix-courses](https://github.com/sergii-ziborov/crabrix-courses). The Academy
-contains 742 lessons and steps plus 46 editable examples. Native CoursePacks
+contains 798 lessons and steps across 24 courses, including the Git → CLI → HTTP API → SQL → diagnostics → delivery route. Native CoursePacks
 remain public and account-free; complete website lessons use a free account.
 Current iPhone, iPad and Duo screenshots belong to the app repository and
 [crabrix.com](https://crabrix.com/), rather than this engineering dependency.
@@ -139,5 +215,9 @@ Current iPhone, iPad and Duo screenshots belong to the app repository and
 This repository’s existing open-source license and original notices are
 unchanged. The proprietary app source and authored course corpus have separate
 terms; those terms do not restrict rights granted by this component’s license.
-App distribution archives use Xcode Cloud; GitHub documentation updates do not
-start an app build or deployment.
+Distribution archives use the selected Xcode 27.2 SDK and manual signing; Xcode
+Cloud remains available. GitHub documentation updates do not start an app deployment.
+
+## Current application workflow
+
+The [screenshot user guide](https://crabrix.com/guide/) explains the native compiler, prepared offline packages, build stages, local HTML/CSS/JavaScript preview and iPhone/iPad/Duo layouts. The [main application compatibility report](https://github.com/sergii-ziborov/Crabrix/blob/codex/compiler-output-practice-review/docs/offline-web-compatibility-2026-10-24.md) separates exact fixture outcomes from unverified capabilities. Package acquisition needs a connection for new archives; compilation and program execution remain on-device. The web preview does not supply TCP servers, native C toolchains, procedural macros or CUDA hardware.

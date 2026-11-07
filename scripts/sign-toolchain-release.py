@@ -61,7 +61,10 @@ def sign(repository, directory, tag, toolchain_id, key_id, key_path, public_base
     lock = json.loads((repository / "toolchain.lock.json").read_text())
     provenance = json.loads((directory / "toolchain-provenance.json").read_text())
     lock_digest = digest(repository / "toolchain.lock.json")
-    if provenance.get("candidate") is not False or provenance.get("builderWorkingTreeDirty") is not False or \
+    if provenance.get("buildProfile") is not None:
+        import qualified_macos
+        qualified_macos.check(directory, repository / "toolchain.lock.json")
+    elif provenance.get("candidate") is not False or provenance.get("builderWorkingTreeDirty") is not False or \
             provenance.get("sourceLockSHA256") != lock_digest or \
             provenance.get("rustRevision") != lock["rust"]["revision"] or \
             provenance.get("rustVersion") != lock["rust"]["actualVersion"]:
@@ -115,6 +118,10 @@ def sign(repository, directory, tag, toolchain_id, key_id, key_path, public_base
         "assets": assets,
         "releaseFiles": release_files,
     }
+    if provenance.get("buildProfile") is not None:
+        # The profile check above requires the real macro consumers, cold
+        # Kameo build, original candidate provenance and two identical outputs.
+        payload["capabilities"] = qualified_macos.profile()["capabilities"]
     encoded = (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode()
     key = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
     if not isinstance(key, Ed25519PrivateKey):
