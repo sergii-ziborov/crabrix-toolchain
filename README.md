@@ -221,3 +221,7 @@ Cloud remains available. GitHub documentation updates do not start an app deploy
 ## Current application workflow
 
 The [screenshot user guide](https://crabrix.com/guide/) explains the native compiler, prepared offline packages, build stages, local HTML/CSS/JavaScript preview and iPhone/iPad/Duo layouts. The [main application compatibility report](https://github.com/sergii-ziborov/Crabrix/blob/codex/compiler-output-practice-review/docs/offline-web-compatibility-2026-10-24.md) separates exact fixture outcomes from unverified capabilities. Package acquisition needs a connection for new archives; compilation and program execution remain on-device. The web preview does not supply TCP servers, native C toolchains, procedural macros or CUDA hardware.
+
+## Historical descriptor contract
+
+The October 1 worktree also supplies [`scripts/toolchain_descriptor.py`](scripts/toolchain_descriptor.py), an independently tested signing and verification utility for the historical [T01–T06 compatibility evidence schema](docs/COMPATIBILITY-RESULTS.md). Its parser checks artifact hashes and rejects candidate output, incomplete source-build locks, missing notices and repository-contained private keys. Its openly published test seed and keyring are test fixtures, never production trust roots. The current qualified Mac release procedure and `scripts/sign-toolchain-release.py` above remain the production path; the historical schema does not replace its reproducibility and app qualification requirements. Both utilities use the pinned publication dependencies.
