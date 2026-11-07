@@ -204,7 +204,7 @@ third-party components.
 The native app and companion website are maintained in
 [Crabrix](https://github.com/sergii-ziborov/Crabrix); signed course data lives in
 [crabrix-courses](https://github.com/sergii-ziborov/crabrix-courses). The Academy
-contains 742 lessons and steps plus 46 editable examples. Native CoursePacks
+contains 798 lessons and steps across 24 courses, including the Git → CLI → HTTP API → SQL → diagnostics → delivery route. Native CoursePacks
 remain public and account-free; complete website lessons use a free account.
 Current iPhone, iPad and Duo screenshots belong to the app repository and
 [crabrix.com](https://crabrix.com/), rather than this engineering dependency.
@@ -215,8 +215,8 @@ Current iPhone, iPad and Duo screenshots belong to the app repository and
 This repository’s existing open-source license and original notices are
 unchanged. The proprietary app source and authored course corpus have separate
 terms; those terms do not restrict rights granted by this component’s license.
-App distribution archives use Xcode Cloud; GitHub documentation updates do not
-start an app build or deployment.
+Distribution archives use the selected Xcode 27.2 SDK and manual signing; Xcode
+Cloud remains available. GitHub documentation updates do not start an app deployment.
 
 ## Current application workflow
 
